@@ -3,7 +3,7 @@ name: Bootstrap repository
 on:
   push:
     paths:
-      - "bootstrap/part*"
+      - "bootstrap/part07"
 
 permissions:
   contents: write
