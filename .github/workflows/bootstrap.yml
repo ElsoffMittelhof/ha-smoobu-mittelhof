@@ -3,7 +3,7 @@ name: Bootstrap repository
 on:
   push:
     paths:
-      - "payload/data03"
+      - "payload/data11"
 
 permissions:
   contents: write
