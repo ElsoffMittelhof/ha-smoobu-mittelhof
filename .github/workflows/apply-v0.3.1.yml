@@ -1,0 +1,164 @@
+name: Apply v0.3.1 blocked periods
+
+on:
+  push:
+    paths:
+      - ".github/apply-v0.3.1.trigger"
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply v0.3.1 changes
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import json
+
+          def replace_once(text, old, new, label):
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{label}: expected exactly one match, got {count}")
+              return text.replace(old, new, 1)
+
+          # Backend: get_bookings is a display service and must include Smoobu blocked periods.
+          p = Path("custom_components/smoobu_mittelhof/services.py")
+          text = p.read_text()
+          text = replace_once(
+              text,
+              'bookings = await runtime.api.get_reservations(start, end, apartment_id=apartment_id)',
+              'bookings = await runtime.api.get_reservations(\n            start, end, exclude_blocked=False, apartment_id=apartment_id\n        )',
+              "services get_reservations",
+          )
+          text = replace_once(
+              text,
+              '                "type": booking.get("type"),\n',
+              '                "type": booking.get("type"),\n                "is_blocked": bool(booking.get("is-blocked-booking")),\n',
+              "services is_blocked response",
+          )
+          p.write_text(text)
+
+          # Frontend: render blocks clearly as a hatched, labelled period.
+          p = Path("custom_components/smoobu_mittelhof/frontend/smoobu-timeline-card.js")
+          text = p.read_text()
+          text = text.replace("Version 0.3.0", "Version 0.3.1", 1)
+          text = replace_once(
+              text,
+              '''  _eventGuest(booking) {\n    return String(booking.guest || "").trim() || "Belegt";\n  }''',
+              '''  _isBlocked(booking) {\n    return booking?.is_blocked === true;\n  }\n\n  _eventGuest(booking) {\n    if (this._isBlocked(booking)) return "Geblockt";\n    return String(booking.guest || "").trim() || "Belegt";\n  }''',
+              "timeline blocked helper",
+          )
+          text = replace_once(
+              text,
+              '''    const channel = this._channelInfo(booking.channel);\n    const guest = this._eventGuest(booking);\n    const startsBefore = arrivalSerial < startSerial;\n    const endsAfter = departureSerial > endSerial;\n    const classes = ["booking", `channel-${channel.key}`];''',
+              '''    const channel = this._channelInfo(booking.channel);\n    const blocked = this._isBlocked(booking);\n    const guest = this._eventGuest(booking);\n    const startsBefore = arrivalSerial < startSerial;\n    const endsAfter = departureSerial > endSerial;\n    const classes = ["booking", blocked ? "blocked" : `channel-${channel.key}`];''',
+              "timeline bar classes",
+          )
+          text = replace_once(
+              text,
+              '''    const tooltip = [\n      guest,\n      booking.house || "",\n      `${this._formatLongDate(arrival)} – ${this._formatLongDate(departure)}`,\n      channel.label,\n    ].filter(Boolean).join(" · ");''',
+              '''    const tooltip = [\n      blocked ? "Geblockter Zeitraum" : guest,\n      booking.house || "",\n      `${this._formatLongDate(arrival)} – ${this._formatLongDate(departure)}`,\n      blocked ? "Nicht buchbar" : channel.label,\n    ].filter(Boolean).join(" · ");''',
+              "timeline tooltip",
+          )
+          text = replace_once(
+              text,
+              '''        ${this._config.show_channel ? `<span class="channel-badge">${this._escape(channel.badge)}</span>` : ""}\n        <span class="booking-label">${this._escape(guest)}</span>''',
+              '''        ${blocked ? `<span class="channel-badge blocked-badge">×</span>` : (this._config.show_channel ? `<span class="channel-badge">${this._escape(channel.badge)}</span>` : "")}\n        <span class="booking-label">${this._escape(guest)}</span>''',
+              "timeline bar badge",
+          )
+          text = replace_once(
+              text,
+              '''    const channel = this._channelInfo(booking.channel);\n    const nights = this._nights(booking);\n    const people = Number(booking.adults || 0) + Number(booking.children || 0);\n    const price = booking.price;''',
+              '''    const channel = this._channelInfo(booking.channel);\n    const blocked = this._isBlocked(booking);\n    const nights = this._nights(booking);\n    const people = Number(booking.adults || 0) + Number(booking.children || 0);\n    const price = booking.price;''',
+              "timeline details blocked",
+          )
+          text = replace_once(
+              text,
+              '''          ${this._config.show_people ? `<div><span>Personen</span><strong>${people || "–"}</strong></div>` : ""}\n          <div><span>Kanal</span><strong>${this._escape(channel.label)}</strong></div>\n          <div><span>Buchungs-ID</span><strong>${this._escape(booking.booking_id || "–")}</strong></div>\n          ${this._config.show_price && price != null ? `<div><span>Preis</span><strong>${this._escape(price)} €</strong></div>` : ""}''',
+              '''          ${!blocked && this._config.show_people ? `<div><span>Personen</span><strong>${people || "–"}</strong></div>` : ""}\n          <div><span>${blocked ? "Status" : "Kanal"}</span><strong>${this._escape(blocked ? "Geblockter Zeitraum" : channel.label)}</strong></div>\n          <div><span>${blocked ? "Sperr-ID" : "Buchungs-ID"}</span><strong>${this._escape(booking.booking_id || "–")}</strong></div>\n          ${!blocked && this._config.show_price && price != null ? `<div><span>Preis</span><strong>${this._escape(price)} €</strong></div>` : ""}''',
+              "timeline details grid",
+          )
+          text = replace_once(
+              text,
+              '''          --other: #b9a7dd;\n          --today: rgba(33, 150, 243, .10);''',
+              '''          --other: #b9a7dd;\n          --blocked-bg: rgba(96, 103, 112, .18);\n          --blocked-line: rgba(96, 103, 112, .58);\n          --today: rgba(33, 150, 243, .10);''',
+              "timeline blocked colors",
+          )
+          text = replace_once(
+              text,
+              '''        .booking.channel-other { background: var(--other); }\n        .booking.continues-left''',
+              '''        .booking.channel-other { background: var(--other); }\n        .booking.blocked {\n          background: repeating-linear-gradient(\n            135deg,\n            var(--blocked-bg) 0,\n            var(--blocked-bg) 7px,\n            var(--blocked-line) 7px,\n            var(--blocked-line) 10px\n          );\n          border: 1px solid var(--blocked-line);\n          color: var(--primary-text-color);\n          box-shadow: none;\n        }\n        .booking.blocked .blocked-badge {\n          background: rgba(255,255,255,.82);\n          color: var(--primary-text-color);\n        }\n        .booking.continues-left''',
+              "timeline blocked css",
+          )
+          text = replace_once(
+              text,
+              '''        .legend-dot.other { background: var(--other); }\n        .today-line''',
+              '''        .legend-dot.other { background: var(--other); }\n        .legend-dot.blocked {\n          border-radius: 2px;\n          border: 1px solid var(--blocked-line);\n          background: repeating-linear-gradient(\n            135deg,\n            var(--blocked-bg) 0,\n            var(--blocked-bg) 3px,\n            var(--blocked-line) 3px,\n            var(--blocked-line) 5px\n          );\n        }\n        .today-line''',
+              "timeline blocked legend css",
+          )
+          text = replace_once(
+              text,
+              '''    const updatedText = this._lastFetch\n      ? new Intl.DateTimeFormat("de-DE", { hour: "2-digit", minute: "2-digit" }).format(new Date(this._lastFetch))\n      : "–";''',
+              '''    const updatedText = this._lastFetch\n      ? new Intl.DateTimeFormat("de-DE", { hour: "2-digit", minute: "2-digit" }).format(new Date(this._lastFetch))\n      : "–";\n    const blockedCount = this._bookings.filter((booking) => this._isBlocked(booking)).length;\n    const bookingCount = this._bookings.length - blockedCount;''',
+              "timeline counts",
+          )
+          text = replace_once(
+              text,
+              '''          <span>${this._error ? this._escape(this._error) : `${this._bookings.length} Buchung(en) im Zeitraum`}</span>''',
+              '''          <span>${this._error ? this._escape(this._error) : `${bookingCount} Buchung(en) · ${blockedCount} geblockte Zeitraum/Zeiträume`}</span>''',
+              "timeline status",
+          )
+          text = replace_once(
+              text,
+              '''        ${this._config.show_channel ? `\n          <div class="legend">\n            <span class="legend-item"><i class="legend-dot booking"></i>Booking.com</span>\n            <span class="legend-item"><i class="legend-dot website"></i>Website</span>\n            <span class="legend-item"><i class="legend-dot airbnb"></i>Airbnb</span>\n            <span class="legend-item"><i class="legend-dot other"></i>Andere</span>\n          </div>` : ""}''',
+              '''        <div class="legend">\n          ${this._config.show_channel ? `\n            <span class="legend-item"><i class="legend-dot booking"></i>Booking.com</span>\n            <span class="legend-item"><i class="legend-dot website"></i>Website</span>\n            <span class="legend-item"><i class="legend-dot airbnb"></i>Airbnb</span>\n            <span class="legend-item"><i class="legend-dot other"></i>Andere</span>` : ""}\n          <span class="legend-item"><i class="legend-dot blocked"></i>Geblockt</span>\n        </div>''',
+              "timeline legend",
+          )
+          text = text.replace('console.info("%c SMOOBU-TIMELINE-CARD %c v0.3.0 ', 'console.info("%c SMOOBU-TIMELINE-CARD %c v0.3.1 ', 1)
+          p.write_text(text)
+
+          # Manifest version.
+          p = Path("custom_components/smoobu_mittelhof/manifest.json")
+          manifest = json.loads(p.read_text())
+          if manifest.get("version") != "0.3.0":
+              raise SystemExit(f"Unexpected manifest version: {manifest.get('version')}")
+          manifest["version"] = "0.3.1"
+          p.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n")
+
+          # Changelog.
+          p = Path("CHANGELOG.md")
+          text = p.read_text()
+          text = replace_once(
+              text,
+              "# Changelog\n\n",
+              "# Changelog\n\n## 0.3.1\n\n- Smoobu blocked periods are included in the timeline data without changing laundry/NUKI workflow processing.\n- Blocked periods are rendered as clearly labelled hatched bars with a dedicated legend entry and detail status.\n- Timeline status now separates regular bookings and blocked periods.\n\n",
+              "changelog",
+          )
+          p.write_text(text)
+
+          # README timeline note.
+          p = Path("README.md")
+          text = p.read_text()
+          needle = "Add it once as a JavaScript module under **Settings → Dashboards → Resources**. Configure the card with your own accommodation names and calendar entity IDs."
+          replacement = needle + " Blocked Smoobu periods are displayed separately with a hatched `Geblockt` style."
+          text = replace_once(text, needle, replacement, "readme timeline")
+          p.write_text(text)
+          PY
+
+          node --check custom_components/smoobu_mittelhof/frontend/smoobu-timeline-card.js
+          python -m compileall -q custom_components/smoobu_mittelhof
+
+      - name: Commit v0.3.1
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add custom_components/smoobu_mittelhof/services.py \
+                  custom_components/smoobu_mittelhof/frontend/smoobu-timeline-card.js \
+                  custom_components/smoobu_mittelhof/manifest.json \
+                  CHANGELOG.md README.md
+          git commit -m "feat: show Smoobu blocked periods in timeline"
+          git push
