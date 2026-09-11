@@ -15,6 +15,16 @@ jobs:
       - name: Compile Python sources
         run: python -m compileall -q custom_components/smoobu_mittelhof
 
+  frontend-syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Check timeline card JavaScript
+        run: node --check custom_components/smoobu_mittelhof/frontend/smoobu-timeline-card.js
+
   hassfest:
     runs-on: ubuntu-latest
     steps:
