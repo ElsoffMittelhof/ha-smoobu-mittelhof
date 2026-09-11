@@ -71,7 +71,7 @@ The integration serves the included card at:
 /smoobu_mittelhof/frontend/smoobu-timeline-card.js
 ```
 
-Add it once as a JavaScript module under **Settings → Dashboards → Resources**. Configure the card with your own accommodation names and calendar entity IDs. Blocked Smoobu periods are displayed separately with a hatched `Geblockt` style.
+Add it once as a JavaScript module under **Settings → Dashboards → Resources**. Configure the card with your own accommodation names and calendar entity IDs. Blocked Smoobu periods are displayed separately with a hatched `Geblockt` style. Arrival and departure dates use a midday boundary, so consecutive reservations and blocked periods meet in the middle of their shared calendar date.
 
 ## Security
 
