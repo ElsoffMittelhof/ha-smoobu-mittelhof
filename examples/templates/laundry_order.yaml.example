@@ -1,0 +1,16 @@
+subject: "Wäschebestellung – [mhLaundryDates]"
+body: |
+  Guten Tag,
+
+  bitte folgende Wäsche bereitstellen:
+
+  [mhLaundrySchedule]
+
+  Artikel:
+  [mhLaundryProducts]
+
+  Netto: [mhLaundryNet] [mhLaundryCurrency]
+  MwSt. ([mhLaundryVatPercent] %): [mhLaundryVat] [mhLaundryCurrency]
+  Brutto: [mhLaundryGross] [mhLaundryCurrency]
+
+  Vielen Dank.
