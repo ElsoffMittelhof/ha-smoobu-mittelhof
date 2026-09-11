@@ -47,7 +47,9 @@ async def async_register_services(hass: HomeAssistant) -> None:
         start = call.data["start_date"]
         end = call.data["end_date"]
         apartment_id = call.data.get("apartment_id")
-        bookings = await runtime.api.get_reservations(start, end, apartment_id=apartment_id)
+        bookings = await runtime.api.get_reservations(
+            start, end, exclude_blocked=False, apartment_id=apartment_id
+        )
         rows = []
         for booking in valid_bookings(bookings, runtime.houses):
             apartment = booking.get("apartment") or {}
@@ -69,6 +71,7 @@ async def async_register_services(hass: HomeAssistant) -> None:
                 "notice": booking.get("notice"),
                 "guest_app_url": booking.get("guest-app-url"),
                 "type": booking.get("type"),
+                "is_blocked": bool(booking.get("is-blocked-booking")),
             })
         return {"start_date": str(start), "end_date": str(end), "bookings": rows}
 

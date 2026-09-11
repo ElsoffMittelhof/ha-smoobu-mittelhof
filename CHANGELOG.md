@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.1
+
+- Smoobu blocked periods are included in the timeline data without changing laundry/NUKI workflow processing.
+- Blocked periods are rendered as clearly labelled hatched bars with a dedicated legend entry and detail status.
+- Timeline status now separates regular bookings and blocked periods.
+
 ## 0.3.0
 
 First public release.

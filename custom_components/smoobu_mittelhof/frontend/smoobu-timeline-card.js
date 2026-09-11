@@ -1,6 +1,6 @@
 /*
  * Smoobu Timeline Card for Home Assistant
- * Version 0.3.0
+ * Version 0.3.1
  *
  * Uses the response-capable service from the custom integration:
  *   smoobu_mittelhof.get_bookings
@@ -265,7 +265,12 @@ class SmoobuTimelineCard extends HTMLElement {
     return { key: "other", badge: raw ? raw.charAt(0).toUpperCase() : "•", label: raw || "Sonstiger Kanal" };
   }
 
+  _isBlocked(booking) {
+    return booking?.is_blocked === true;
+  }
+
   _eventGuest(booking) {
+    if (this._isBlocked(booking)) return "Geblockt";
     return String(booking.guest || "").trim() || "Belegt";
   }
 
@@ -297,18 +302,19 @@ class SmoobuTimelineCard extends HTMLElement {
     const startIndex = visibleStart - startSerial;
     const endIndex = visibleEnd - startSerial;
     const channel = this._channelInfo(booking.channel);
+    const blocked = this._isBlocked(booking);
     const guest = this._eventGuest(booking);
     const startsBefore = arrivalSerial < startSerial;
     const endsAfter = departureSerial > endSerial;
-    const classes = ["booking", `channel-${channel.key}`];
+    const classes = ["booking", blocked ? "blocked" : `channel-${channel.key}`];
     if (startsBefore) classes.push("continues-left");
     if (endsAfter) classes.push("continues-right");
 
     const tooltip = [
-      guest,
+      blocked ? "Geblockter Zeitraum" : guest,
       booking.house || "",
       `${this._formatLongDate(arrival)} – ${this._formatLongDate(departure)}`,
-      channel.label,
+      blocked ? "Nicht buchbar" : channel.label,
     ].filter(Boolean).join(" · ");
 
     return `
@@ -319,7 +325,7 @@ class SmoobuTimelineCard extends HTMLElement {
         data-house-index="${houseIndex}"
         title="${this._escape(tooltip)}"
       >
-        ${this._config.show_channel ? `<span class="channel-badge">${this._escape(channel.badge)}</span>` : ""}
+        ${blocked ? `<span class="channel-badge blocked-badge">×</span>` : (this._config.show_channel ? `<span class="channel-badge">${this._escape(channel.badge)}</span>` : "")}
         <span class="booking-label">${this._escape(guest)}</span>
       </button>`;
   }
@@ -329,6 +335,7 @@ class SmoobuTimelineCard extends HTMLElement {
     if (!booking) return "";
 
     const channel = this._channelInfo(booking.channel);
+    const blocked = this._isBlocked(booking);
     const nights = this._nights(booking);
     const people = Number(booking.adults || 0) + Number(booking.children || 0);
     const price = booking.price;
@@ -346,10 +353,10 @@ class SmoobuTimelineCard extends HTMLElement {
           <div><span>Anreise</span><strong>${this._escape(this._formatLongDate(booking.arrival))}</strong></div>
           <div><span>Abreise</span><strong>${this._escape(this._formatLongDate(booking.departure))}</strong></div>
           <div><span>Nächte</span><strong>${nights ?? "–"}</strong></div>
-          ${this._config.show_people ? `<div><span>Personen</span><strong>${people || "–"}</strong></div>` : ""}
-          <div><span>Kanal</span><strong>${this._escape(channel.label)}</strong></div>
-          <div><span>Buchungs-ID</span><strong>${this._escape(booking.booking_id || "–")}</strong></div>
-          ${this._config.show_price && price != null ? `<div><span>Preis</span><strong>${this._escape(price)} €</strong></div>` : ""}
+          ${!blocked && this._config.show_people ? `<div><span>Personen</span><strong>${people || "–"}</strong></div>` : ""}
+          <div><span>${blocked ? "Status" : "Kanal"}</span><strong>${this._escape(blocked ? "Geblockter Zeitraum" : channel.label)}</strong></div>
+          <div><span>${blocked ? "Sperr-ID" : "Buchungs-ID"}</span><strong>${this._escape(booking.booking_id || "–")}</strong></div>
+          ${!blocked && this._config.show_price && price != null ? `<div><span>Preis</span><strong>${this._escape(price)} €</strong></div>` : ""}
         </div>
       </div>`;
   }
@@ -405,6 +412,8 @@ class SmoobuTimelineCard extends HTMLElement {
     const updatedText = this._lastFetch
       ? new Intl.DateTimeFormat("de-DE", { hour: "2-digit", minute: "2-digit" }).format(new Date(this._lastFetch))
       : "–";
+    const blockedCount = this._bookings.filter((booking) => this._isBlocked(booking)).length;
+    const bookingCount = this._bookings.length - blockedCount;
 
     this.shadowRoot.innerHTML = `
       <style>
@@ -421,6 +430,8 @@ class SmoobuTimelineCard extends HTMLElement {
           --website: #c9dcfa;
           --airbnb: #ef8c8c;
           --other: #b9a7dd;
+          --blocked-bg: rgba(96, 103, 112, .18);
+          --blocked-line: rgba(96, 103, 112, .58);
           --today: rgba(33, 150, 243, .10);
           --weekend: rgba(127, 127, 127, .055);
         }
@@ -530,6 +541,22 @@ class SmoobuTimelineCard extends HTMLElement {
         .booking.channel-website { background: var(--website); }
         .booking.channel-airbnb { background: var(--airbnb); }
         .booking.channel-other { background: var(--other); }
+        .booking.blocked {
+          background: repeating-linear-gradient(
+            135deg,
+            var(--blocked-bg) 0,
+            var(--blocked-bg) 7px,
+            var(--blocked-line) 7px,
+            var(--blocked-line) 10px
+          );
+          border: 1px solid var(--blocked-line);
+          color: var(--primary-text-color);
+          box-shadow: none;
+        }
+        .booking.blocked .blocked-badge {
+          background: rgba(255,255,255,.82);
+          color: var(--primary-text-color);
+        }
         .booking.continues-left { border-top-left-radius: 4px; border-bottom-left-radius: 4px; }
         .booking.continues-right { border-top-right-radius: 4px; border-bottom-right-radius: 4px; }
         .channel-badge {
@@ -574,6 +601,17 @@ class SmoobuTimelineCard extends HTMLElement {
         .legend-dot.website { background: var(--website); }
         .legend-dot.airbnb { background: var(--airbnb); }
         .legend-dot.other { background: var(--other); }
+        .legend-dot.blocked {
+          border-radius: 2px;
+          border: 1px solid var(--blocked-line);
+          background: repeating-linear-gradient(
+            135deg,
+            var(--blocked-bg) 0,
+            var(--blocked-bg) 3px,
+            var(--blocked-line) 3px,
+            var(--blocked-line) 5px
+          );
+        }
         .today-line {
           pointer-events: none;
           grid-row: 1 / ${this._config.houses.length + 2};
@@ -624,7 +662,7 @@ class SmoobuTimelineCard extends HTMLElement {
           </div>
         </div>
         <div class="status ${this._error ? "error" : ""}">
-          <span>${this._error ? this._escape(this._error) : `${this._bookings.length} Buchung(en) im Zeitraum`}</span>
+          <span>${this._error ? this._escape(this._error) : `${bookingCount} Buchung(en) · ${blockedCount} geblockte Zeitraum/Zeiträume`}</span>
           <span>Stand ${this._escape(updatedText)}</span>
         </div>
         <div class="scroll">
@@ -637,13 +675,14 @@ class SmoobuTimelineCard extends HTMLElement {
           </div>
         </div>
         ${this._detailsHtml()}
-        ${this._config.show_channel ? `
-          <div class="legend">
+        <div class="legend">
+          ${this._config.show_channel ? `
             <span class="legend-item"><i class="legend-dot booking"></i>Booking.com</span>
             <span class="legend-item"><i class="legend-dot website"></i>Website</span>
             <span class="legend-item"><i class="legend-dot airbnb"></i>Airbnb</span>
-            <span class="legend-item"><i class="legend-dot other"></i>Andere</span>
-          </div>` : ""}
+            <span class="legend-item"><i class="legend-dot other"></i>Andere</span>` : ""}
+          <span class="legend-item"><i class="legend-dot blocked"></i>Geblockt</span>
+        </div>
       </ha-card>`;
 
     this._bindEvents();
@@ -720,4 +759,4 @@ if (!window.customCards.some((card) => card.type === "smoobu-timeline-card")) {
   });
 }
 
-console.info("%c SMOOBU-TIMELINE-CARD %c v0.3.0 ", "color:white;background:#3f78b5;font-weight:700", "color:#3f78b5;background:#eef5ff");
+console.info("%c SMOOBU-TIMELINE-CARD %c v0.3.1 ", "color:white;background:#3f78b5;font-weight:700", "color:#3f78b5;background:#eef5ff");
