@@ -1126,44 +1126,48 @@ class WorkflowManager:
         attrs = {
             "automation_enabled": enabled,
             "booking_id": job.get("booking_id"),
-            "house": job.get("house")          "housorted": TrundryHBLED,
- in( placeholF,ousorted": TrundryHBLE3aeholF,ousuRY_ENABLED if ki.valuuuuuuwAYS if kin
- in( placeholF,_lineinei       1g_id,
-      oeinein kin
- ins self._lock:
-            if not bool(self._option(CONF_LAUNDRY_ENABLED, DEFAULT_LAUNDRY_ENABLED)):
-                await self._notify("Wäsche", "Wäsche-Automatik ist in den Integrationsoptionen deaktiviert.")
-                return
-            requests = se": ,r    ULT_L    "bokin
- ins(Pn de_id:
-                continue
-            days = _days_until(job.get(date_field), today)
-            if days is not None and 0 <= days <= horizon:
-                candidates.append((days, job))
-        if not candidates:
-     P{
-            ly          candidates.append((days, job))
-        if not caandidaternappend((days, job))
-partment_id not in self.runtime.houses or not booking.get("arrival"):
-                continue
-            previous = jobs.get(booking_id)
-            base = {
-                "booking_id": booking_id,
-                "apartment_id": apartment_id,
-          e CONF_NUKI_LEAD_DAYS,
-                DEFAULT_LAUNDRY_LEAD_DAYS if kind == "laundry" else DuUND           rRY_LEAIr1       return "Templates prüfen", attrs return "Templates prüfen", attrs return "Templates prüfen", attrs return "Templates prüfen", attrs return "Templates prüfen", attrv       jobs = self.runtime.E      tmplates prüfen", attrv     ")          "housorted": TrundryHBLED,
- in( placeholF,ousorted": TrundryHBLE3aeholF,ousuRYf kind == "laundry" h<procecizon_days)
- l  rabled5ot caandidaternryHBv     prüetu_t c 6 returnst-E-Mail-          self.runtime.store.data["nuki_joquest=temp prüfen", attrr" job))
-pat-E-Muests = se": ,r    ULT_L    "bokin
- ins(Pn de_id:
-                continue
-            days = _days_until(job.get(          job))
-rissing", "changed_aftquests = [
-    king_id,
-           MODE, DEFAULT_NUKI_TEST_ST_ST_ST_ST"ssA es,ryHBLE3ae     elf._ue
-      EFAULT_NUKI_TESTual4issus") innot Noner, dict1, attrs
+            "house": job.get("house"),
+            "apartment_id": job.get("apartment_id"),
+            "arrival": job.get("arrival"),
+            "departure": job.get("departure"),
+            "days": days,
+            "workflow_status": status,
+            "request_id": job.get("request_id"),
+            "last_error": job.get("last_error"),
+        }
+        prefix = "Automatik aus · " if not enabled else ""
+        if days > lead_days and status not in {"sent", "missing_after_sent"}:
+            return prefix + f"Geplant · {'Wechsel' if kind == 'laundry' else 'Anreise'} {_format_de(job.get(date_field))} · in {days} Tagen", attrs
 
- oNoner, dict1, attrs
+        if kind == "laundry":
+            labels = {
+                "new": "Wäscheprüfung fällig",
+                "pending": "Freigabe offen",
+                "changed": "Änderung freigeben",
+                "sent": "Bestellt",
+                "ignored": "Ignoriert",
+                "missing": "Buchung entfallen",
+                "missing_after_sent": "Storno prüfen",
+                "email_error": "E-Mail-Fehler",
+                "config_error": "Konfiguration prüfen",
+            }
+            label = labels.get(status, "Wäsche prüfen")
+            if status == "pending" and (_parse_dt(job.get("snooze_until")) or dt_util.now()) > dt_util.now():
+                label = "Morgen erinnern"
+            return prefix + f"{label} · Wechsel {_format_de(job.get('departure'))}", attrs
 
- oNoner, dict1t     if (_days_until(job.get("departure"), today) is not None)
-   
+        labels = {
+            "new": "NUKI-Prüfung fällig",
+            "pending": "Freigabe offen",
+            "code_missing": "NUKI-Code fehlt",
+            "changed_after_sent": "Anreise geändert",
+            "sent": "Code versendet",
+            "ignored": "Ignoriert",
+            "missing": "Buchung entfallen",
+            "missing_after_sent": "Storno prüfen",
+            "email_error": "E-Mail-Fehler",
+        }
+        label = labels.get(status, "NUKI prüfen")
+        if status == "pending" and (_parse_dt(job.get("snooze_until")) or dt_util.now()) > dt_util.now():
+            label = "Morgen erinnern"
+        return prefix + f"{label} · Anreise {_format_de(job.get('arrival'))}", attrs
