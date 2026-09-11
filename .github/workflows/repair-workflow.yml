@@ -1,0 +1,39 @@
+name: Repair workflow source
+
+on:
+  push:
+    paths:
+      - "workflow_repair_trigger"
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Replace corrupted workflow tail
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('custom_components/smoobu_mittelhof/workflow.py')
+          source = path.read_text()
+          marker = '    def _status_for_house('
+          if marker not in source:
+              raise SystemExit('status method marker missing')
+          prefix = source.split(marker, 1)[0]
+          tail = Path('patches/workflow_tail.pyfrag').read_text()
+          path.write_text(prefix + tail)
+          PY
+          python -m compileall -q custom_components/smoobu_mittelhof
+          rm -rf patches workflow_repair_trigger .github/workflows/repair-workflow.yml
+      - name: Commit repair
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix: repair workflow source corruption"
+          git push
