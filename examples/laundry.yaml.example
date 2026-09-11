@@ -1,0 +1,47 @@
+# Generic example only.
+# Copy to /config/smoobu_workflow/laundry.yaml and customize.
+currency: EUR
+vat_percent: 19
+
+products:
+  duvet_cover:
+    label: Bettbezug
+    unit_price: 2.00
+  sheet:
+    label: Laken
+    unit_price: 1.80
+  pillowcase:
+    label: Kissenbezug
+    unit_price: 0.80
+  towel:
+    label: Handtuch
+    unit_price: 0.80
+  bath_towel:
+    label: Badetuch
+    unit_price: 1.10
+  bath_mat:
+    label: Badevorleger
+    unit_price: 0.70
+
+houses:
+  "123456":
+    name: Apartment A
+    enabled: false
+    quantities:
+      duvet_cover: 2
+      sheet: 2
+      pillowcase: 2
+      towel: 2
+      bath_towel: 2
+      bath_mat: 1
+
+  "234567":
+    name: Apartment B
+    enabled: false
+    quantities:
+      duvet_cover: 4
+      sheet: 4
+      pillowcase: 4
+      towel: 4
+      bath_towel: 4
+      bath_mat: 1
