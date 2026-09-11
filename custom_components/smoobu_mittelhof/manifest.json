@@ -7,6 +7,9 @@
   "integration_type": "hub",
   "iot_class": "cloud_polling",
   "requirements": [],
+  "dependencies": [
+    "http"
+  ],
   "documentation": "https://github.com/ElsoffMittelhof/ha-smoobu-mittelhof",
   "issue_tracker": "https://github.com/ElsoffMittelhof/ha-smoobu-mittelhof/issues",
   "codeowners": [
