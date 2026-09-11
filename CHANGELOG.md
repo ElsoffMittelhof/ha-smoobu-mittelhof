@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.2 — 2026-09-11
+
+- Timeline bars now use half-day geometry: arrival and departure boundaries are rendered at the centre of their calendar date.
+- Consecutive reservations and blocked periods therefore meet at the same midday boundary instead of occupying whole-day columns.
+- Example: a reservation ending on 03.10. ends at the middle of 03.10.; a block from 03.10. to 04.10. runs from midday 03.10. to midday 04.10.
+
 ## 0.3.1 — 2026-09-11
 
 - Smoobu blocked periods are included in the timeline data without changing laundry/NUKI workflow processing.

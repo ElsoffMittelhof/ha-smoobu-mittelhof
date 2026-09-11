@@ -1,6 +1,6 @@
 /*
  * Smoobu Timeline Card for Home Assistant
- * Version 0.3.1
+ * Version 0.3.2
  *
  * Uses the response-capable service from the custom integration:
  *   smoobu_mittelhof.get_bookings
@@ -295,17 +295,22 @@ class SmoobuTimelineCard extends HTMLElement {
     const arrivalSerial = this._daySerial(arrival);
     const departureSerial = this._daySerial(departure);
 
-    const visibleStart = Math.max(arrivalSerial, startSerial);
-    const visibleEnd = Math.min(departureSerial, endSerial);
-    if (visibleEnd <= visibleStart) return "";
+    // Smoobu arrival/departure dates are stay boundaries and are shown at midday.
+    // Consecutive bookings and blocked periods therefore meet in the centre of a date cell.
+    const rangeHalfDays = (endSerial - startSerial) * 2;
+    const arrivalHalf = ((arrivalSerial - startSerial) * 2) + 1;
+    const departureHalf = ((departureSerial - startSerial) * 2) + 1;
+    const visibleStartHalf = Math.max(arrivalHalf, 0);
+    const visibleEndHalf = Math.min(departureHalf, rangeHalfDays);
+    if (visibleEndHalf <= visibleStartHalf) return "";
 
-    const startIndex = visibleStart - startSerial;
-    const endIndex = visibleEnd - startSerial;
+    const startGridLine = visibleStartHalf + 2;
+    const endGridLine = visibleEndHalf + 2;
     const channel = this._channelInfo(booking.channel);
     const blocked = this._isBlocked(booking);
     const guest = this._eventGuest(booking);
-    const startsBefore = arrivalSerial < startSerial;
-    const endsAfter = departureSerial > endSerial;
+    const startsBefore = arrivalHalf < 0;
+    const endsAfter = departureHalf > rangeHalfDays;
     const classes = ["booking", blocked ? "blocked" : `channel-${channel.key}`];
     if (startsBefore) classes.push("continues-left");
     if (endsAfter) classes.push("continues-right");
@@ -320,7 +325,7 @@ class SmoobuTimelineCard extends HTMLElement {
     return `
       <button
         class="${classes.join(" ")}"
-        style="grid-column: ${startIndex + 2} / ${endIndex + 2}; grid-row: 1;"
+        style="grid-column: ${startGridLine} / ${endGridLine}; grid-row: 1;"
         data-booking-id="${this._escape(booking.booking_id)}"
         data-house-index="${houseIndex}"
         title="${this._escape(tooltip)}"
@@ -371,7 +376,7 @@ class SmoobuTimelineCard extends HTMLElement {
     const { start, end } = this._dateRange();
     const startSerial = this._daySerial(start);
     const todaySerial = this._daySerial(this._localDate());
-    const gridStyle = `grid-template-columns: var(--label-width) repeat(${this._days}, minmax(var(--day-width), 1fr));`;
+    const gridStyle = `grid-template-columns: var(--label-width) repeat(${this._days * 2}, minmax(var(--half-day-width), 1fr));`;
 
     const days = [];
     for (let i = 0; i < this._days; i += 1) {
@@ -384,8 +389,11 @@ class SmoobuTimelineCard extends HTMLElement {
       });
     }
 
-    const headerDays = days.map((item) => `
-      <div class="day-head ${item.isToday ? "today" : ""} ${item.isWeekend ? "weekend" : ""}">
+    const headerDays = days.map((item, dayIndex) => `
+      <div
+        class="day-head ${item.isToday ? "today" : ""} ${item.isWeekend ? "weekend" : ""}"
+        style="grid-column: ${dayIndex * 2 + 2} / span 2;"
+      >
         <span>${this._escape(this._weekday(item.date))}</span>
         <strong>${this._escape(this._formatShortDate(item.date))}</strong>
       </div>`).join("");
@@ -395,8 +403,11 @@ class SmoobuTimelineCard extends HTMLElement {
         .map((booking) => this._barHtml(booking, start, end, houseIndex))
         .join("");
 
-      const backgrounds = days.map((item) => `
-        <div class="day-cell ${item.isToday ? "today" : ""} ${item.isWeekend ? "weekend" : ""}"></div>`).join("");
+      const backgrounds = days.map((item, dayIndex) => `
+        <div
+          class="day-cell ${item.isToday ? "today" : ""} ${item.isWeekend ? "weekend" : ""}"
+          style="grid-column: ${dayIndex * 2 + 2} / span 2;"
+        ></div>`).join("");
 
       return `
         <div class="timeline-row" style="${gridStyle}">
@@ -404,7 +415,7 @@ class SmoobuTimelineCard extends HTMLElement {
             ${this._escape(house.name)}
           </button>
           ${backgrounds}
-          ${bars || `<div class="empty-row" style="grid-column: 2 / ${this._days + 2};">frei</div>`}
+          ${bars || `<div class="empty-row" style="grid-column: 2 / ${this._days * 2 + 2};">frei</div>`}
         </div>`;
     }).join("");
 
@@ -423,6 +434,7 @@ class SmoobuTimelineCard extends HTMLElement {
           max-width: none;
           --label-width: 165px;
           --day-width: 44px;
+          --half-day-width: 22px;
           --line: var(--divider-color, rgba(127,127,127,.22));
           --muted: var(--secondary-text-color, #777);
           --card-bg: var(--ha-card-background, var(--card-background-color, #fff));
@@ -640,7 +652,7 @@ class SmoobuTimelineCard extends HTMLElement {
         .details-grid span { color: var(--muted); font-size: .72rem; }
         .details-grid strong { font-size: .86rem; }
         @media (max-width: 700px) {
-          :host { --label-width: 125px; --day-width: 42px; }
+          :host { --label-width: 125px; --day-width: 42px; --half-day-width: 21px; }
           .header { align-items: flex-start; flex-direction: column; }
           .controls { justify-content: flex-start; }
           .house-label { font-size: .82rem; padding-left: 8px; }
@@ -759,4 +771,4 @@ if (!window.customCards.some((card) => card.type === "smoobu-timeline-card")) {
   });
 }
 
-console.info("%c SMOOBU-TIMELINE-CARD %c v0.3.1 ", "color:white;background:#3f78b5;font-weight:700", "color:#3f78b5;background:#eef5ff");
+console.info("%c SMOOBU-TIMELINE-CARD %c v0.3.2 ", "color:white;background:#3f78b5;font-weight:700", "color:#3f78b5;background:#eef5ff");
