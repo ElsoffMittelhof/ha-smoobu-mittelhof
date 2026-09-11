@@ -1,0 +1,138 @@
+name: Patch v0.3.2 half-day timeline
+
+on:
+  push:
+    paths:
+      - ".github/patch-v0.3.2-halfday.trigger"
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply v0.3.2 changes
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(text: str, old: str, new: str, label: str) -> str:
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{label}: expected exactly one match, got {count}")
+              return text.replace(old, new, 1)
+
+          js_path = Path("custom_components/smoobu_mittelhof/frontend/smoobu-timeline-card.js")
+          js = js_path.read_text()
+          js = replace_once(js, " * Version 0.3.1", " * Version 0.3.2", "card version")
+
+          old = '''    const visibleStart = Math.max(arrivalSerial, startSerial);
+              const visibleEnd = Math.min(departureSerial, endSerial);
+              if (visibleEnd <= visibleStart) return "";
+
+              const startIndex = visibleStart - startSerial;
+              const endIndex = visibleEnd - startSerial;
+              const channel = this._channelInfo(booking.channel);
+              const blocked = this._isBlocked(booking);
+              const guest = this._eventGuest(booking);
+              const startsBefore = arrivalSerial < startSerial;
+              const endsAfter = departureSerial > endSerial;'''.replace("              ", "    ")
+          new = '''    // Smoobu dates are stay boundaries: arrival and departure are rendered at midday.
+              // Consecutive bookings and blocked periods therefore meet in the centre of the shared date.
+              const rangeHalfDays = (endSerial - startSerial) * 2;
+              const arrivalHalf = ((arrivalSerial - startSerial) * 2) + 1;
+              const departureHalf = ((departureSerial - startSerial) * 2) + 1;
+              const visibleStartHalf = Math.max(arrivalHalf, 0);
+              const visibleEndHalf = Math.min(departureHalf, rangeHalfDays);
+              if (visibleEndHalf <= visibleStartHalf) return "";
+
+              const startGridLine = visibleStartHalf + 2;
+              const endGridLine = visibleEndHalf + 2;
+              const channel = this._channelInfo(booking.channel);
+              const blocked = this._isBlocked(booking);
+              const guest = this._eventGuest(booking);
+              const startsBefore = arrivalHalf < 0;
+              const endsAfter = departureHalf > rangeHalfDays;'''.replace("              ", "    ")
+          js = replace_once(js, old, new, "half-day booking geometry")
+          js = replace_once(
+              js,
+              '        style="grid-column: ${startIndex + 2} / ${endIndex + 2}; grid-row: 1;"',
+              '        style="grid-column: ${startGridLine} / ${endGridLine}; grid-row: 1;"',
+              "booking grid lines",
+          )
+          js = replace_once(
+              js,
+              '    const gridStyle = `grid-template-columns: var(--label-width) repeat(${this._days}, minmax(var(--day-width), 1fr));`;',
+              '    const gridStyle = `grid-template-columns: var(--label-width) repeat(${this._days * 2}, minmax(var(--half-day-width), 1fr));`;',
+              "half-day grid",
+          )
+          js = replace_once(
+              js,
+              '''    const headerDays = days.map((item) => `
+              <div class="day-head ${item.isToday ? "today" : ""} ${item.isWeekend ? "weekend" : ""}">
+                <span>${this._escape(this._weekday(item.date))}</span>
+                <strong>${this._escape(this._formatShortDate(item.date))}</strong>
+              </div>`).join("");'''.replace("              ", "    "),
+              '''    const headerDays = days.map((item, dayIndex) => `
+              <div
+                class="day-head ${item.isToday ? "today" : ""} ${item.isWeekend ? "weekend" : ""}"
+                style="grid-column: ${dayIndex * 2 + 2} / span 2;"
+              >
+                <span>${this._escape(this._weekday(item.date))}</span>
+                <strong>${this._escape(this._formatShortDate(item.date))}</strong>
+              </div>`).join("");'''.replace("              ", "    "),
+              "header day spans",
+          )
+          js = replace_once(
+              js,
+              '''      const backgrounds = days.map((item) => `
+              <div class="day-cell ${item.isToday ? "today" : ""} ${item.isWeekend ? "weekend" : ""}"></div>`).join("");'''.replace("              ", "      "),
+              '''      const backgrounds = days.map((item, dayIndex) => `
+              <div
+                class="day-cell ${item.isToday ? "today" : ""} ${item.isWeekend ? "weekend" : ""}"
+                style="grid-column: ${dayIndex * 2 + 2} / span 2;"
+              ></div>`).join("");'''.replace("              ", "      "),
+              "background day spans",
+          )
+          js = replace_once(
+              js,
+              '${bars || `<div class="empty-row" style="grid-column: 2 / ${this._days + 2};">frei</div>`}',
+              '${bars || `<div class="empty-row" style="grid-column: 2 / ${this._days * 2 + 2};">frei</div>`}',
+              "empty row span",
+          )
+          js = replace_once(js, "          --day-width: 44px;", "          --day-width: 44px;\n          --half-day-width: 22px;", "half-day width variable")
+          js_path.write_text(js)
+
+          manifest_path = Path("custom_components/smoobu_mittelhof/manifest.json")
+          manifest = manifest_path.read_text()
+          manifest = replace_once(manifest, '"version": "0.3.1"', '"version": "0.3.2"', "manifest version")
+          manifest_path.write_text(manifest)
+
+          readme_path = Path("README.md")
+          readme = readme_path.read_text()
+          readme = replace_once(readme, "Current public version: **0.3.1**.", "Current public version: **0.3.2**.", "README version")
+          readme_path.write_text(readme)
+
+          changelog_path = Path("CHANGELOG.md")
+          changelog = changelog_path.read_text()
+          marker = "# Changelog\n\n"
+          entry = """## 0.3.2 — 2026-09-11
+
+- Timeline bars now use half-day geometry: arrival and departure boundaries are rendered at the centre of their calendar date.
+- Consecutive reservations and blocked periods therefore meet at the same midday boundary instead of occupying whole-day columns.
+- Example: a reservation ending on 03.10. ends at the middle of 03.10.; a block from 03.10. to 04.10. runs from midday 03.10. to midday 04.10.
+
+"""
+          if "## 0.3.2" not in changelog:
+              changelog = replace_once(changelog, marker, marker + entry, "changelog insertion")
+          changelog_path.write_text(changelog)
+          PY
+      - name: Commit v0.3.2
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add custom_components/smoobu_mittelhof/frontend/smoobu-timeline-card.js custom_components/smoobu_mittelhof/manifest.json README.md CHANGELOG.md
+          git commit -m "fix: render timeline stays on half-day boundaries"
+          git push
