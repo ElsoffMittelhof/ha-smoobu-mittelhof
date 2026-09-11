@@ -31,6 +31,7 @@ jobs:
           alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/='
 
           recovered = None
+          members = None
           for offset in (-2, -1, 0, 1, 2):
               start = len(prefix) + offset
               if start < 0 or start > len(payload):
@@ -40,12 +41,13 @@ jobs:
                   candidate = base + suffix
                   try:
                       raw = base64.b64decode(candidate, validate=True)
-                      with tarfile.open(fileobj=io.BytesIO(raw), mode='r:gz') as tf:
-                          tf.getmembers()
+                      tf = tarfile.open(fileobj=io.BytesIO(raw), mode='r:gz')
+                      members = tf.getmembers()
                   except Exception:
                       continue
                   recovered = raw
-                  print(f'Recovered payload with offset={offset!r}, suffix={suffix!r}')
+                  print(f'Recovered payload with offset={offset!r}, suffix={suffix!r}, members={len(members)}')
+                  tf.close()
                   break
               if recovered is not None:
                   break
@@ -53,10 +55,20 @@ jobs:
           if recovered is None:
               raise SystemExit('Could not recover payload')
 
-          Path('payload.tar.gz').write_bytes(recovered)
+          # The original upload lost a byte in the gzip trailer. The tar stream
+          # itself is complete, so extract members without reading beyond the tar EOF.
+          with tarfile.open(fileobj=io.BytesIO(recovered), mode='r:gz') as tf:
+              for member in tf.getmembers():
+                  if not member.isfile():
+                      continue
+                  src = tf.extractfile(member)
+                  if src is None:
+                      continue
+                  target = Path(member.name)
+                  target.parent.mkdir(parents=True, exist_ok=True)
+                  target.write_bytes(src.read())
           PY
-          tar -xzf payload.tar.gz
-          rm -rf payload bootstrap payload.tar.gz .github/workflows/bootstrap.yml RELEASE_READY TEST_FINAL_STATE_PROBE
+          rm -rf payload bootstrap .github/workflows/bootstrap.yml RELEASE_READY TEST_FINAL_STATE_PROBE
       - name: Commit final public tree
         run: |
           git config user.name "github-actions[bot]"
