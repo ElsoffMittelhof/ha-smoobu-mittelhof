@@ -1,0 +1,14 @@
+subject: "Änderung Wäschebestellung – [mhLaundryDates]"
+body: |
+  Guten Tag,
+
+  bitte die folgende geänderte Wäscheplanung berücksichtigen:
+
+  [mhLaundrySchedule]
+
+  Artikel:
+  [mhLaundryProducts]
+
+  Brutto: [mhLaundryGross] [mhLaundryCurrency]
+
+  Vielen Dank.
