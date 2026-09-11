@@ -1,0 +1,67 @@
+{
+  "title": "Smoobu Workflow",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Smoobu verbinden",
+        "description": "Smoobu API-Zugangsdaten eingeben.",
+        "data": {
+          "api_key": "API-Key",
+          "api_secret": "API-Secret"
+        }
+      },
+      "houses": {
+        "title": "Unterkünfte auswählen",
+        "description": "Eine Unterkunft pro Zeile im Format apartment_id=Name. Erkannte Unterkünfte sind bereits eingetragen.",
+        "data": {
+          "houses": "Unterkünfte"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "API-Zugangsdaten ungültig.",
+      "cannot_connect": "Verbindung zu Smoobu fehlgeschlagen.",
+      "invalid_houses": "Mindestens eine gültige Unterkunft im Format apartment_id=Name eintragen."
+    },
+    "abort": {
+      "already_configured": "Smoobu Workflow ist bereits eingerichtet."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Smoobu Workflow konfigurieren",
+        "data": {
+          "houses": "Unterkünfte (apartment_id=Name, eine pro Zeile)",
+          "update_interval_minutes": "Abfrageintervall in Minuten",
+          "horizon_days": "Vorausschau in Tagen",
+          "lookback_days": "Rückblick in Tagen",
+          "show_guest_names": "Gastnamen anzeigen",
+          "config_directory": "Konfigurationsordner",
+          "notify_service": "Mobile Notify-Aktion, z. B. notify.mobile_app_mein_handy",
+          "notification_start_hour": "Benachrichtigungen ab Stunde",
+          "notification_end_hour": "Benachrichtigungen bis Stunde",
+          "laundry_enabled": "Wäsche-Automatik aktivieren",
+          "laundry_lead_days": "Wäsche-Vorlauf in Tagen",
+          "laundry_reminder_hours": "Wäsche-Erinnerung nach Stunden",
+          "laundry_email": "E-Mail-Adresse der Wäscherei",
+          "nuki_enabled": "NUKI-Automatik aktivieren",
+          "nuki_lead_days": "NUKI-Vorlauf in Tagen",
+          "nuki_reminder_hours": "NUKI-Erinnerung nach Stunden",
+          "nuki_test_mode": "NUKI-Testmodus",
+          "nuki_test_email": "NUKI-Test-E-Mail-Adresse",
+          "smtp_host": "SMTP-Host",
+          "smtp_port": "SMTP-Port",
+          "smtp_username": "SMTP-Benutzer",
+          "smtp_password": "SMTP-Passwort",
+          "smtp_sender": "SMTP-Absender",
+          "smtp_starttls": "STARTTLS verwenden",
+          "smtp_ssl": "Direktes SSL verwenden"
+        }
+      }
+    },
+    "error": {
+      "invalid_houses": "Mindestens eine gültige Unterkunft im Format apartment_id=Name eintragen."
+    }
+  }
+}

@@ -1,0 +1,157 @@
+get_bookings:
+  name: Buchungen abrufen
+  description: Liefert Smoobu-Buchungen für einen beliebigen Zeitraum als Response-Daten.
+  fields:
+    start_date:
+      required: true
+      selector:
+        date:
+    end_date:
+      required: true
+      selector:
+        date:
+    apartment_id:
+      required: false
+      selector:
+        number:
+          min: 1
+          mode: box
+
+generate_it_nrw_statistics:
+  name: IT.NRW Statistik erzeugen
+  description: Berechnet die Monatsstatistik und speichert das Ergebnis im Statistik-Sensor.
+  fields:
+    year:
+      required: true
+      selector:
+        number:
+          min: 2000
+          max: 2100
+          mode: box
+    month:
+      required: true
+      selector:
+        number:
+          min: 1
+          max: 12
+          mode: box
+    mode:
+      required: false
+      default: node_red_compatible
+      selector:
+        select:
+          options:
+            - node_red_compatible
+            - calendar_month
+
+
+generate_selected_it_nrw_statistics:
+  name: Ausgewählte IT.NRW Statistik erstellen
+  description: Erzeugt die Statistik sofort für den in Monat und Jahr ausgewählten Zeitraum.
+
+preview_template:
+  name: E-Mail-Template Vorschau
+  description: Rendert eine externe YAML-Mailvorlage mit echten Smoobu-Platzhaltern, versendet aber keine E-Mail.
+  fields:
+    booking_id:
+      required: true
+      selector:
+        text:
+    template:
+      required: true
+      example: nuki_de
+      selector:
+        text:
+
+calculate_laundry:
+  name: Wäschebedarf berechnen
+  description: Berechnet Mengen und Kosten aus dem externen Produktkatalog und den Hausprofilen.
+  fields:
+    apartment_ids:
+      required: true
+      selector:
+        object:
+
+reload_files:
+  name: Externe Dateien prüfen
+  description: Prüft die externe Wäschereikonfiguration. Templates werden bei jeder Verwendung neu geladen.
+
+process_workflows:
+  name: Wäsche + NUKI jetzt prüfen
+  description: Führt die vollständige Wäsche- und NUKI-Prozesslogik sofort aus.
+  fields:
+    force_laundry_notify:
+      required: false
+      default: false
+      selector:
+        boolean:
+    force_nuki_notify:
+      required: false
+      default: false
+      selector:
+        boolean:
+
+laundry_command:
+  name: Wäsche Freigabe ausführen
+  description: Führt die aktuelle Wäsche-Freigabe aus. Ohne Request-ID wird der jüngste offene Request verwendet.
+  fields:
+    command:
+      required: true
+      selector:
+        select:
+          options:
+            - send
+            - later
+            - skip
+    request_id:
+      required: false
+      selector:
+        text:
+
+nuki_command:
+  name: NUKI Freigabe ausführen
+  description: Führt die aktuelle NUKI-Freigabe aus. Ohne Request-ID wird der jüngste offene Request verwendet.
+  fields:
+    command:
+      required: true
+      selector:
+        select:
+          options:
+            - send
+            - later
+            - skip
+    request_id:
+      required: false
+      selector:
+        text:
+
+send_test_email:
+  name: SMTP Testmail senden
+  description: Sendet eine Testmail über die in der Integration konfigurierten SMTP-Zugangsdaten.
+  fields:
+    to:
+      required: true
+      selector:
+        text:
+
+reset_laundry:
+  name: Wäsche offene Status zurücksetzen
+  description: Setzt nur offene/ignorierte/fehlerhafte Wäschevorgänge zurück. Bereits versendete Bestellungen bleiben geschützt.
+
+reset_nuki:
+  name: NUKI offene Status zurücksetzen
+  description: Setzt nur offene/ignorierte/fehlerhafte NUKI-Vorgänge zurück. Bereits versendete Gastmails bleiben geschützt.
+
+reset_all_workflow_state:
+  name: Gesamten Workflow-Testzustand zurücksetzen
+  description: Löscht Wäsche- und NUKI-Workflowzustände inklusive bereits versendet. Nur für Migration und Tests verwenden.
+  fields:
+    process_now:
+      required: false
+      default: false
+      selector:
+        boolean:
+
+send_test_notification:
+  name: Test-Push senden
+  description: Sendet eine Test-Benachrichtigung über den in der Integration eingestellten Notify-Service.

@@ -1,0 +1,67 @@
+{
+  "title": "Smoobu Workflow",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect Smoobu",
+        "description": "Enter your Smoobu API credentials.",
+        "data": {
+          "api_key": "API key",
+          "api_secret": "API secret"
+        }
+      },
+      "houses": {
+        "title": "Choose accommodations",
+        "description": "One accommodation per line in the format apartment_id=Name. Discovered accommodations are prefilled.",
+        "data": {
+          "houses": "Accommodations"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Invalid API credentials.",
+      "cannot_connect": "Could not connect to Smoobu.",
+      "invalid_houses": "Enter at least one valid accommodation as apartment_id=Name."
+    },
+    "abort": {
+      "already_configured": "Smoobu Workflow is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Configure Smoobu Workflow",
+        "data": {
+          "houses": "Accommodations (apartment_id=Name, one per line)",
+          "update_interval_minutes": "Polling interval in minutes",
+          "horizon_days": "Look-ahead days",
+          "lookback_days": "Look-back days",
+          "show_guest_names": "Show guest names",
+          "config_directory": "Configuration directory",
+          "notify_service": "Mobile notify action, e.g. notify.mobile_app_my_phone",
+          "notification_start_hour": "Notifications from hour",
+          "notification_end_hour": "Notifications until hour",
+          "laundry_enabled": "Enable laundry workflow",
+          "laundry_lead_days": "Laundry lead days",
+          "laundry_reminder_hours": "Laundry reminder hours",
+          "laundry_email": "Laundry recipient email",
+          "nuki_enabled": "Enable NUKI workflow",
+          "nuki_lead_days": "NUKI lead days",
+          "nuki_reminder_hours": "NUKI reminder hours",
+          "nuki_test_mode": "NUKI test mode",
+          "nuki_test_email": "NUKI test email",
+          "smtp_host": "SMTP host",
+          "smtp_port": "SMTP port",
+          "smtp_username": "SMTP username",
+          "smtp_password": "SMTP password",
+          "smtp_sender": "SMTP sender",
+          "smtp_starttls": "Use STARTTLS",
+          "smtp_ssl": "Use direct SSL"
+        }
+      }
+    },
+    "error": {
+      "invalid_houses": "Enter at least one valid accommodation as apartment_id=Name."
+    }
+  }
+}
