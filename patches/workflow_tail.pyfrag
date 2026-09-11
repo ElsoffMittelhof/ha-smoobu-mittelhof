@@ -1,0 +1,75 @@
+    def _status_for_house(self, kind: str, apartment_id: int) -> tuple[str, dict[str, Any]]:
+        today = dt_util.now().date()
+        jobs = self.runtime.store.laundry_jobs if kind == "laundry" else self.runtime.store.nuki_jobs
+        date_field = "departure" if kind == "laundry" else "arrival"
+        lead_days = int(
+            self._option(
+                CONF_LAUNDRY_LEAD_DAYS if kind == "laundry" else CONF_NUKI_LEAD_DAYS,
+                DEFAULT_LAUNDRY_LEAD_DAYS if kind == "laundry" else DEFAULT_NUKI_LEAD_DAYS,
+            )
+        )
+        horizon = int(self.runtime.coordinator.horizon_days)
+        candidates = []
+        for job in jobs.values():
+            if int(job.get("apartment_id") or 0) != apartment_id:
+                continue
+            days = _days_until(job.get(date_field), today)
+            if days is not None and 0 <= days <= horizon:
+                candidates.append((days, job))
+        if not candidates:
+            label = "Kein Wechsel" if kind == "laundry" else "Keine Anreise"
+            return f"{label} ≤ {horizon} Tage", {}
+        days, job = sorted(candidates, key=lambda item: (item[0], str(item[1].get(date_field) or "")))[0]
+        status = str(job.get("status") or "new")
+        enabled = bool(self._option(
+            CONF_LAUNDRY_ENABLED if kind == "laundry" else CONF_NUKI_ENABLED,
+            DEFAULT_LAUNDRY_ENABLED if kind == "laundry" else DEFAULT_NUKI_ENABLED,
+        ))
+        attrs = {
+            "automation_enabled": enabled,
+            "booking_id": job.get("booking_id"),
+            "house": job.get("house"),
+            "apartment_id": job.get("apartment_id"),
+            "arrival": job.get("arrival"),
+            "departure": job.get("departure"),
+            "days": days,
+            "workflow_status": status,
+            "request_id": job.get("request_id"),
+            "last_error": job.get("last_error"),
+        }
+        prefix = "Automatik aus · " if not enabled else ""
+        if days > lead_days and status not in {"sent", "missing_after_sent"}:
+            return prefix + f"Geplant · {'Wechsel' if kind == 'laundry' else 'Anreise'} {_format_de(job.get(date_field))} · in {days} Tagen", attrs
+
+        if kind == "laundry":
+            labels = {
+                "new": "Wäscheprüfung fällig",
+                "pending": "Freigabe offen",
+                "changed": "Änderung freigeben",
+                "sent": "Bestellt",
+                "ignored": "Ignoriert",
+                "missing": "Buchung entfallen",
+                "missing_after_sent": "Storno prüfen",
+                "email_error": "E-Mail-Fehler",
+                "config_error": "Konfiguration prüfen",
+            }
+            label = labels.get(status, "Wäsche prüfen")
+            if status == "pending" and (_parse_dt(job.get("snooze_until")) or dt_util.now()) > dt_util.now():
+                label = "Morgen erinnern"
+            return prefix + f"{label} · Wechsel {_format_de(job.get('departure'))}", attrs
+
+        labels = {
+            "new": "NUKI-Prüfung fällig",
+            "pending": "Freigabe offen",
+            "code_missing": "NUKI-Code fehlt",
+            "changed_after_sent": "Anreise geändert",
+            "sent": "Code versendet",
+            "ignored": "Ignoriert",
+            "missing": "Buchung entfallen",
+            "missing_after_sent": "Storno prüfen",
+            "email_error": "E-Mail-Fehler",
+        }
+        label = labels.get(status, "NUKI prüfen")
+        if status == "pending" and (_parse_dt(job.get("snooze_until")) or dt_util.now()) > dt_util.now():
+            label = "Morgen erinnern"
+        return prefix + f"{label} · Anreise {_format_de(job.get('arrival'))}", attrs
