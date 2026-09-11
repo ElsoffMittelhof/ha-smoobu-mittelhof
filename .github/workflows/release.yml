@@ -1,0 +1,37 @@
+name: Release v0.3.0
+
+on:
+  push:
+    paths:
+      - ".github/release-v0.3.0.trigger"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Verify version
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          manifest = json.loads(Path('custom_components/smoobu_mittelhof/manifest.json').read_text())
+          assert manifest['version'] == '0.3.0', manifest['version']
+          PY
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view v0.3.0 >/dev/null 2>&1; then
+            echo "Release v0.3.0 already exists."
+            exit 0
+          fi
+          gh release create v0.3.0 \
+            --target "${GITHUB_SHA}" \
+            --title "Smoobu Workflow v0.3.0" \
+            --notes "First public release.\n\n- Dynamic Smoobu accommodation mapping\n- Laundry approval workflow\n- NUKI guest-code workflow\n- Booking calendars and status sensors\n- Optional IT.NRW statistics\n- Installation-specific IDs, email addresses, notify services and SMTP defaults removed from the public codebase\n\nSee CHANGELOG.md and MIGRATION.md for details."
