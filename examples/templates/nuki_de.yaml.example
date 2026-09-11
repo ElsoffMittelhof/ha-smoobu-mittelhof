@@ -1,0 +1,11 @@
+subject: "Ihr Zugangscode für [apartment]"
+body: |
+  Guten Tag [firstGuestName],
+
+  Ihr Zugangscode für [apartment] lautet:
+
+  [nukiPin]
+
+  Weitere Informationen: [guestAppLink]
+
+  Wir wünschen einen angenehmen Aufenthalt.
