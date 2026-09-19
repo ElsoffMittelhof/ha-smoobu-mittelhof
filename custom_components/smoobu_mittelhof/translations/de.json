@@ -56,7 +56,12 @@
           "smtp_password": "SMTP-Passwort",
           "smtp_sender": "SMTP-Absender",
           "smtp_starttls": "STARTTLS verwenden",
-          "smtp_ssl": "Direktes SSL verwenden"
+          "smtp_ssl": "Direktes SSL verwenden",
+          "laundry_order_mode": "Wäsche-Bestellmodus",
+          "laundry_initial_stock_sets": "Initialer Bestand vollständiger Sets",
+          "laundry_reorder_after_sets": "Nachbestellung nach verbrauchten Sets",
+          "laundry_reorder_quantity_sets": "Sets je Nachbestellung",
+          "laundry_reorder_bath_mats": "Badvorleger je Nachbestellung"
         }
       }
     },
