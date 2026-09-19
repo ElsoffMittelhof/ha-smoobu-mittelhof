@@ -16,6 +16,7 @@ from .const import (
     SERVICE_GENERATE_SELECTED_STATISTICS,
     SERVICE_GET_BOOKINGS,
     SERVICE_LAUNDRY_COMMAND,
+    SERVICE_RECORD_LAUNDRY_CONSUMPTION,
     SERVICE_NUKI_COMMAND,
     SERVICE_PREVIEW_TEMPLATE,
     SERVICE_PROCESS_WORKFLOWS,
@@ -131,6 +132,14 @@ async def async_register_services(hass: HomeAssistant) -> None:
             str(call.data["request_id"]) if call.data.get("request_id") else None,
         )
 
+    async def record_laundry_consumption(call: ServiceCall) -> None:
+        runtime = _runtime(hass)
+        await runtime.workflow.async_record_laundry_consumption(
+            int(call.data["apartment_id"]),
+            int(call.data["sets"]),
+            str(call.data["booking_id"]) if call.data.get("booking_id") else None,
+        )
+
     async def nuki_command(call: ServiceCall) -> None:
         runtime = _runtime(hass)
         await runtime.workflow.async_nuki_command(
@@ -228,6 +237,16 @@ async def async_register_services(hass: HomeAssistant) -> None:
         schema=vol.Schema({
             vol.Required("command"): vol.In(["send", "later", "skip"]),
             vol.Optional("request_id"): str,
+        }),
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_RECORD_LAUNDRY_CONSUMPTION,
+        record_laundry_consumption,
+        schema=vol.Schema({
+            vol.Required("apartment_id"): vol.Coerce(int),
+            vol.Required("sets"): vol.All(vol.Coerce(int), vol.Range(min=0, max=8)),
+            vol.Optional("booking_id"): str,
         }),
     )
     hass.services.async_register(
