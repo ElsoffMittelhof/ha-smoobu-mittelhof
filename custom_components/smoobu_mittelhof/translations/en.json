@@ -56,7 +56,12 @@
           "smtp_password": "SMTP password",
           "smtp_sender": "SMTP sender",
           "smtp_starttls": "Use STARTTLS",
-          "smtp_ssl": "Use direct SSL"
+          "smtp_ssl": "Use direct SSL",
+          "laundry_order_mode": "Laundry ordering mode",
+          "laundry_initial_stock_sets": "Initial stock of complete sets",
+          "laundry_reorder_after_sets": "Reorder after consumed sets",
+          "laundry_reorder_quantity_sets": "Sets per replenishment order",
+          "laundry_reorder_bath_mats": "Bath mats per replenishment order"
         }
       }
     },
