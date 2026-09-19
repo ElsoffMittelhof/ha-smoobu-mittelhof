@@ -63,6 +63,54 @@ For new installations the default path is:
 
 Copy and customize the generic examples from `examples/`. These local files are intentionally not managed by HACS updates.
 
+
+## Laundry ordering modes
+
+The integration supports two selectable laundry workflows:
+
+- **Per departure** — keeps the established behaviour and creates an approval request for the configured laundry quantities of upcoming checkouts.
+- **Stock / sets** — tracks a clean-linen stock and asks for cleaner confirmation of the actual sets used after checkout.
+
+Stock mode defaults to:
+
+```text
+Initial stock:       24 complete sets
+Reorder threshold:   12 consumed sets
+Reorder quantity:    12 complete sets
+Bath mats per order: 3
+
+Suggested use:
+1 guest  = 2 sets
+2 guests = 2 sets
+3+ guests = 4 sets
+```
+
+A complete set is defined by the installation's `stock_order.set_products` mapping. A typical set contains one fitted sheet, one pillowcase, one duvet cover, one large towel and one small towel.
+
+The cleaner records actual use with the Home Assistant action:
+
+```text
+smoobu_mittelhof.record_laundry_consumption
+```
+
+If no booking ID is supplied, the action uses the oldest open checkout for the selected accommodation. The latest confirmation can be corrected until a replenishment order has been sent.
+
+For stock mode, add an explicit mapping to the local `laundry.yaml` where possible:
+
+```yaml
+stock_order:
+  set_products:
+    duvet_cover: 1
+    sheet: 1
+    pillowcase: 1
+    towel: 1
+    bath_towel: 1
+  bath_mat_product: bath_mat
+```
+
+The public integration also includes a backwards-compatible name-based product inference for common German and English product names.
+
+
 ## Timeline card
 
 The integration serves the included card at:
