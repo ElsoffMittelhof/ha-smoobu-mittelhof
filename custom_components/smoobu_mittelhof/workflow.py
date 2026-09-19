@@ -623,6 +623,13 @@ class WorkflowManager:
                 return
             if open_request.get("status") == "sending":
                 return
+            if not force_notify:
+                last = _parse_dt(open_request.get("last_notified_at"))
+                reminder = timedelta(
+                    hours=int(self._option(CONF_LAUNDRY_REMINDER_HOURS, DEFAULT_LAUNDRY_REMINDER_HOURS))
+                )
+                if last and now - last < reminder:
+                    return
             request_id = open_id
             open_request.update(
                 status="pending",
@@ -651,6 +658,7 @@ class WorkflowManager:
             return
 
         available = int(stock.get("available_sets") or 0)
+        requests[str(request_id)]["last_notified_at"] = _iso_now()
         await self._notify(
             "Wäschebestand – Nachbestellung",
             f"{unreplenished} Sets sind seit der letzten Auffüllung verbraucht.\n"
@@ -1309,6 +1317,17 @@ class WorkflowManager:
                     )
                     for apartment_id in self.runtime.houses
                 }
+                if self._laundry_mode() == LAUNDRY_MODE_STOCK_SETS:
+                    self.runtime.laundry.calculate_stock_order(
+                        self._stock_option(
+                            CONF_LAUNDRY_REORDER_QUANTITY_SETS,
+                            DEFAULT_LAUNDRY_REORDER_QUANTITY_SETS,
+                        ),
+                        self._stock_option(
+                            CONF_LAUNDRY_REORDER_BATH_MATS,
+                            DEFAULT_LAUNDRY_REORDER_BATH_MATS,
+                        ),
+                    )
             except Exception as err:
                 laundry_error = str(err)
                 laundry_profiles_enabled = {}
