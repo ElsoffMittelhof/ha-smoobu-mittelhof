@@ -108,6 +108,30 @@ laundry_command:
       selector:
         text:
 
+record_laundry_consumption:
+  name: Wäscheverbrauch erfassen
+  description: Erfasst den tatsächlich verbrauchten Satzbestand für die älteste offene Reinigung einer Unterkunft. Im Lagerbestandsmodus wird damit der Bestand reduziert.
+  fields:
+    apartment_id:
+      required: true
+      selector:
+        number:
+          min: 1
+          mode: box
+    sets:
+      required: true
+      selector:
+        number:
+          min: 0
+          max: 8
+          step: 1
+          mode: box
+    booking_id:
+      required: false
+      description: Optional für gezielte Korrekturen; ohne Angabe wird die älteste offene Verbrauchserfassung der Unterkunft verwendet.
+      selector:
+        text:
+
 nuki_command:
   name: NUKI Freigabe ausführen
   description: Führt die aktuelle NUKI-Freigabe aus. Ohne Request-ID wird der jüngste offene Request verwendet.
