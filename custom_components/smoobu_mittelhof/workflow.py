@@ -709,8 +709,24 @@ class WorkflowManager:
                 pending.sort(key=lambda item: str(item.get("departure") or ""))
                 record = pending[0] if pending else None
 
+                # If the cleaner notices a mistake immediately after confirming,
+                # allow the latest confirmation of the current stock generation
+                # to be corrected without requiring a booking ID.
+                if record is None:
+                    generation = int(stock.get("reorder_generation") or 0)
+                    confirmed = [
+                        item for item in consumptions.values()
+                        if int(item.get("apartment_id") or 0) == int(apartment_id)
+                        and item.get("status") == "confirmed"
+                        and int(item.get("reorder_generation") or 0) == generation
+                    ]
+                    confirmed.sort(key=lambda item: str(item.get("confirmed_at") or ""), reverse=True)
+                    record = confirmed[0] if confirmed else None
+
             if not record:
-                raise ValueError("Keine offene Verbrauchserfassung für diese Unterkunft gefunden")
+                raise ValueError(
+                    "Keine offene oder noch korrigierbare Verbrauchserfassung für diese Unterkunft gefunden"
+                )
 
             apply_consumption(stock, record, int(used_sets), _iso_now())
             await self._persist()
@@ -1513,6 +1529,34 @@ class WorkflowManager:
 
         if available is None:
             return "Bestand wird initialisiert", attrs
+
+        generation = int(stock.get("reorder_generation") or 0)
+        recent = [
+            item for item in self.runtime.store.laundry_consumptions.values()
+            if int(item.get("apartment_id") or 0) == int(apartment_id)
+            and item.get("status") == "confirmed"
+            and int(item.get("reorder_generation") or 0) == generation
+        ]
+        recent.sort(key=lambda item: str(item.get("confirmed_at") or ""), reverse=True)
+        if recent:
+            record = recent[0]
+            attrs.update(
+                {
+                    "booking_id": record.get("booking_id"),
+                    "house": record.get("house"),
+                    "departure": record.get("departure"),
+                    "guest_count": record.get("guest_count"),
+                    "suggested_sets": record.get("suggested_sets"),
+                    "used_sets": record.get("used_sets"),
+                    "workflow_status": "confirmed",
+                    "correction_allowed": True,
+                }
+            )
+            return (
+                f"Bestätigt {record.get('used_sets')} Sets · Bestand {available}/{initial}",
+                attrs,
+            )
+
         return f"Bestand {available}/{initial} Sets", attrs
 
     def nuki_status_for_house(self, apartment_id: int) -> tuple[str, dict[str, Any]]:
