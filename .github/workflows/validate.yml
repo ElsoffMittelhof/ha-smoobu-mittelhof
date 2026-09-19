@@ -14,6 +14,8 @@ jobs:
           python-version: "3.13"
       - name: Compile Python sources
         run: python -m compileall -q custom_components/smoobu_mittelhof
+      - name: Test laundry stock accounting
+        run: python tests/test_laundry_stock.py
 
   frontend-syntax:
     runs-on: ubuntu-latest

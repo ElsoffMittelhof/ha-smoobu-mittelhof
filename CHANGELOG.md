@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.0 — 2026-09-19
+
+- Adds selectable laundry ordering modes: the existing per-departure workflow remains available, and the new stock/set mode tracks an initial clean-linen stock.
+- Stock mode defaults to 24 complete sets, triggers replenishment after 12 consumed sets, and orders 12 complete sets plus 3 bath mats.
+- Cleaner-confirmed consumption is stored per checkout; suggested values are 2 sets for 1–2 guests and 4 sets for 3+ guests.
+- Cleaner confirmations can be corrected until the next replenishment order is sent.
+- Adds the Home Assistant action `smoobu_mittelhof.record_laundry_consumption`.
+- Stock mode reuses the existing laundry mail template and supports an explicit `stock_order` product mapping in `laundry.yaml`.
+- Adds persistent stock diagnostics and stock-accounting CI coverage.
+
 ## 0.3.2 — 2026-09-11
 
 - Timeline bars now use half-day geometry: arrival and departure boundaries are rendered at the centre of their calendar date.
