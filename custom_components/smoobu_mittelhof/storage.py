@@ -20,6 +20,8 @@ class SmoobuStateStore:
             "statistics_selection": {},
             "laundry_jobs": {},
             "laundry_requests": {},
+            "laundry_stock": {},
+            "laundry_consumptions": {},
             "nuki_jobs": {},
             "nuki_requests": {},
             "workflow_meta": {},
@@ -65,6 +67,16 @@ class SmoobuStateStore:
         return value if isinstance(value, dict) else {}
 
     @property
+    def laundry_stock(self) -> dict[str, Any]:
+        value = self.data.get("laundry_stock")
+        return value if isinstance(value, dict) else {}
+
+    @property
+    def laundry_consumptions(self) -> dict[str, dict[str, Any]]:
+        value = self.data.get("laundry_consumptions")
+        return value if isinstance(value, dict) else {}
+
+    @property
     def nuki_jobs(self) -> dict[str, dict[str, Any]]:
         value = self.data.get("nuki_jobs")
         return value if isinstance(value, dict) else {}
@@ -84,6 +96,8 @@ class SmoobuStateStore:
         *,
         laundry_jobs: dict[str, dict[str, Any]] | None = None,
         laundry_requests: dict[str, dict[str, Any]] | None = None,
+        laundry_stock: dict[str, Any] | None = None,
+        laundry_consumptions: dict[str, dict[str, Any]] | None = None,
         nuki_jobs: dict[str, dict[str, Any]] | None = None,
         nuki_requests: dict[str, dict[str, Any]] | None = None,
         workflow_meta: dict[str, Any] | None = None,
@@ -92,6 +106,10 @@ class SmoobuStateStore:
             self.data["laundry_jobs"] = deepcopy(laundry_jobs)
         if laundry_requests is not None:
             self.data["laundry_requests"] = deepcopy(laundry_requests)
+        if laundry_stock is not None:
+            self.data["laundry_stock"] = deepcopy(laundry_stock)
+        if laundry_consumptions is not None:
+            self.data["laundry_consumptions"] = deepcopy(laundry_consumptions)
         if nuki_jobs is not None:
             self.data["nuki_jobs"] = deepcopy(nuki_jobs)
         if nuki_requests is not None:
