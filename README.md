@@ -2,7 +2,7 @@
 
 Custom Home Assistant integration for Smoobu reservations, booking calendars, laundry approval workflows, NUKI guest-code emails, and optional IT.NRW monthly statistics.
 
-Current public version: **0.3.2**.
+Current public version: **0.4.1**.
 
 > Technical note: the integration domain remains `smoobu_mittelhof` for compatibility with installations from the private pre-release phase. The public integration contains no property-specific apartment IDs, email addresses, Home Assistant entity IDs, API credentials, or SMTP credentials.
 
@@ -120,6 +120,12 @@ The integration serves the included card at:
 ```
 
 Add it once as a JavaScript module under **Settings → Dashboards → Resources**. Configure the card with your own accommodation names and calendar entity IDs. Blocked Smoobu periods are displayed separately with a hatched `Geblockt` style. Arrival and departure dates use a midday boundary, so consecutive reservations and blocked periods meet in the middle of their shared calendar date.
+
+## IT.NRW statistics
+
+Monthly reporting uses the actual calendar month by default. Overnight stays are attributed by the night they belong to: for example, a stay from 27 September to 2 October contributes the night from 1 October to 2 October to the October statistics.
+
+The former `node_red_compatible` period remains available as an explicit legacy mode, but dashboard/selected-month generation uses `calendar_month`.
 
 ## Security
 
