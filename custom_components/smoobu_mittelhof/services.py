@@ -80,7 +80,7 @@ async def async_register_services(hass: HomeAssistant) -> None:
         runtime = _runtime(hass)
         year = int(call.data["year"])
         month = int(call.data["month"])
-        mode = str(call.data.get("mode", MODE_NODE_RED))
+        mode = str(call.data.get("mode", MODE_CALENDAR))
         result = await async_generate_statistics(hass, runtime, year, month, mode)
         return result if call.return_response else None
 
@@ -97,7 +97,7 @@ async def async_register_services(hass: HomeAssistant) -> None:
         except (TypeError, ValueError) as err:
             raise vol.Invalid("Ungültige IT.NRW Monats-/Jahresauswahl") from err
 
-        await async_generate_statistics(hass, runtime, year, month, MODE_NODE_RED)
+        await async_generate_statistics(hass, runtime, year, month, MODE_CALENDAR)
 
     async def preview_template(call: ServiceCall) -> dict[str, Any]:
         runtime = _runtime(hass)
@@ -194,7 +194,7 @@ async def async_register_services(hass: HomeAssistant) -> None:
         schema=vol.Schema({
             vol.Required("year"): vol.All(vol.Coerce(int), vol.Range(min=2000, max=2100)),
             vol.Required("month"): vol.All(vol.Coerce(int), vol.Range(min=1, max=12)),
-            vol.Optional("mode", default=MODE_NODE_RED): vol.In([MODE_NODE_RED, MODE_CALENDAR]),
+            vol.Optional("mode", default=MODE_CALENDAR): vol.In([MODE_NODE_RED, MODE_CALENDAR]),
         }),
         supports_response=SupportsResponse.OPTIONAL,
     )
