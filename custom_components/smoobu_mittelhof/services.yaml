@@ -37,12 +37,12 @@ generate_it_nrw_statistics:
           mode: box
     mode:
       required: false
-      default: node_red_compatible
+      default: calendar_month
       selector:
         select:
           options:
-            - node_red_compatible
             - calendar_month
+            - node_red_compatible
 
 
 generate_selected_it_nrw_statistics:
