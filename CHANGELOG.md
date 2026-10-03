@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.1 — 2026-10-03
+
+- IT.NRW statistics now use the real calendar month by default instead of the legacy Node-RED-compatible shifted period.
+- A stay from 27.09. to 02.10. now correctly counts the night 01.10.→02.10. in October.
+- Selected-month generation and the dashboard statistics button now use `calendar_month`.
+- The legacy `node_red_compatible` mode remains available only when explicitly requested.
+- Adds a regression test for stays crossing a month boundary.
+
 ## 0.4.0 — 2026-09-19
 
 - Adds selectable laundry ordering modes: the existing per-departure workflow remains available, and the new stock/set mode tracks an initial clean-linen stock.
