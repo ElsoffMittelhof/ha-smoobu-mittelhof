@@ -8,7 +8,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import DOMAIN, INTEGRATION_NAME
 from .runtime import SmoobuRuntime
-from .statistics import MODE_NODE_RED, async_generate_statistics
+from .statistics import MODE_CALENDAR, async_generate_statistics
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback) -> None:
@@ -62,7 +62,7 @@ class GenerateStatisticsButton(BaseButton):
         month_text = str(selection.get("month") or "01 Januar")
         month = int(month_text[:2])
         year = int(selection.get("year") or 2026)
-        await async_generate_statistics(self.hass, self._runtime, year, month, MODE_NODE_RED)
+        await async_generate_statistics(self.hass, self._runtime, year, month, MODE_CALENDAR)
 
 
 class LaundryResendButton(BaseButton):

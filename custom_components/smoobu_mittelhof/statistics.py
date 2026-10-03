@@ -31,7 +31,7 @@ def calculate_statistics(
     bookings: Iterable[dict[str, Any]],
     year: int,
     month: int,
-    mode: str = MODE_NODE_RED,
+    mode: str = MODE_CALENDAR,
     apartment_ids: Iterable[int] | None = None,
 ) -> dict[str, Any]:
     query_from, query_to, month_start, month_end = statistics_period(year, month, mode)
@@ -79,7 +79,7 @@ def calculate_statistics(
     }
 
 
-async def async_generate_statistics(hass, runtime, year: int, month: int, mode: str = MODE_NODE_RED) -> dict[str, Any]:
+async def async_generate_statistics(hass, runtime, year: int, month: int, mode: str = MODE_CALENDAR) -> dict[str, Any]:
     """Fetch one reporting period, calculate it and persist the latest result."""
     from homeassistant.helpers.dispatcher import async_dispatcher_send
     from .const import SIGNAL_STATISTICS_UPDATED

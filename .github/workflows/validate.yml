@@ -16,6 +16,8 @@ jobs:
         run: python -m compileall -q custom_components/smoobu_mittelhof
       - name: Test laundry stock accounting
         run: python tests/test_laundry_stock.py
+      - name: Test IT.NRW statistics month boundaries
+        run: python tests/test_statistics.py
 
   frontend-syntax:
     runs-on: ubuntu-latest
