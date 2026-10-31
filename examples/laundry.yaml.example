@@ -4,12 +4,12 @@ currency: EUR
 vat_percent: 19
 
 products:
-  duvet_cover:
+  flat_fitted_sheet:
     position: 1
-    name: Deckenbezug
+    name: Laken
     unit: Stk
     net_unit_price: 2.00
-  sheet:
+  fitted_sheet:
     position: 2
     name: Spannbetttuch
     unit: Stk
@@ -31,16 +31,19 @@ products:
     net_unit_price: 1.10
   bath_mat:
     position: 6
-    name: Badevorleger
+    name: Badvorleger
     unit: Stk
     net_unit_price: 0.70
 
 # Used by the optional "Lagerbestand / Sets" ordering mode.
-# One complete set consists of one of each configured set product.
+# 1 Set = 1 Kopfkissenbezug + 1 Laken + 1 Spannbetttuch + 1 Badetuch + 1 Handtuch.
+# Badvorleger sind KEIN Bestandteil eines Sets und werden separat gezählt.
+# Anfangsbestand nach Bestandsaufnahme: 24 Sets, 6 Badvorleger.
+# Preise hier sind nur Platzhalter; örtliche Wäschereipreise separat eintragen.
 stock_order:
   set_products:
-    duvet_cover: 1
-    sheet: 1
+    flat_fitted_sheet: 1
+    fitted_sheet: 1
     pillowcase: 1
     towel: 1
     bath_towel: 1
@@ -51,8 +54,8 @@ houses:
     name: Apartment A
     enabled: false
     laundry:
-      duvet_cover: 2
-      sheet: 2
+      flat_fitted_sheet: 2
+      fitted_sheet: 2
       pillowcase: 2
       towel: 2
       bath_towel: 2
@@ -62,8 +65,8 @@ houses:
     name: Apartment B
     enabled: false
     laundry:
-      duvet_cover: 4
-      sheet: 4
+      flat_fitted_sheet: 4
+      fitted_sheet: 4
       pillowcase: 4
       towel: 4
       bath_towel: 4
