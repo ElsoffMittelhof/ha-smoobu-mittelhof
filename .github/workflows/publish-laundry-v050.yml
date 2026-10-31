@@ -1,0 +1,43 @@
+name: Publish Smoobu Workflow v0.5.0
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/publish-laundry-v050.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Ensure expected release and run Python regression tests
+        run: |
+          set -euo pipefail
+          grep -q '"version": "0.5.0"' custom_components/smoobu_mittelhof/manifest.json
+          python -m compileall -q custom_components/smoobu_mittelhof
+          python tests/test_laundry_stock.py
+          python tests/test_statistics.py
+      - name: Create official GitHub release for HACS
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if gh release view v0.5.0 >/dev/null 2>&1; then
+            echo "v0.5.0 already published."
+            exit 0
+          fi
+          python3 - <<'PY'
+          from pathlib import Path
+          s = Path("CHANGELOG.md").read_text(encoding="utf-8")
+          notes = s.split("## 0.5.0", 1)[1].split("## 0.4.1", 1)[0].strip()
+          Path("release-notes-v0.5.0.md").write_text(notes + "\n", encoding="utf-8")
+          PY
+          gh release create v0.5.0 --title "Smoobu Workflow 0.5.0 – Wäschesets und Badvorleger" --notes-file release-notes-v0.5.0.md --target "$GITHUB_SHA"
