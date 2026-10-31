@@ -106,8 +106,8 @@ class LaundryRepository:
 
             stock_order:
               set_products:
-                duvet_cover: 1
-                sheet: 1
+                flat_sheet: 1
+                fitted_sheet: 1
                 pillowcase: 1
                 towel: 1
                 bath_towel: 1
@@ -232,10 +232,10 @@ class LaundryRepository:
         bath_towel = find("badetuch", "badtuch", "bathtowel")
         bath_mat = find("badevorleger", "bathmat", "badvorleger", "badematte")
         small_towel = find("handtuch", "towel", exclude=("badetuch", "badtuch", "bathtowel"))
-        sheet = find("spannbetttuch", "spannbett", "laken", "sheet")
-        duvet = find("deckenbezug", "duvetcover", "bettbezug", "bezug", exclude=("kissen", "pillow"))
+        flat_sheet = find("laken", "flatsheet", "betttuch", exclude=("spann", "fitted"))
+        fitted_sheet = find("spannbetttuch", "spannbett", "fittedsheet")
 
-        resolved = [duvet, sheet, pillow, small_towel, bath_towel]
+        resolved = [flat_sheet, fitted_sheet, pillow, small_towel, bath_towel]
         if any(key is None for key in resolved):
             raise LaundryConfigError(
                 "Could not infer all five stock-set products. Configure stock_order.set_products in laundry.yaml"
