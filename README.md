@@ -158,7 +158,7 @@ the equivalent structured data from local HA:
 ```yaml
 action: smoobu_mittelhof.record_laundry_consumption
 data:
-  apartment_id: 1046730
+  apartment_id: 123456
   sets: 2
   items:
     towel: 1
