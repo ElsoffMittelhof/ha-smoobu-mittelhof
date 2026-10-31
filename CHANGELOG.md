@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.6.0 — 2026-10-31
+
+- Six separate article inventories for pillowcases, flat sheets, fitted sheets, bath towels, hand towels, and bath mats, migrated from the existing 24/6 stock without clearing histories.
+- Cleaner booking combines optional complete sets and extra item quantities, with corrections and negative-stock prevention.
+- Low-stock article-specific reorder proposals (12 per set item, 2 mats); administrator approves the existing email workflow.
+- Supplier email creates an outstanding delivery, never credits stock immediately. Partial/full physical receipts update balances exactly once.
+- New HA actions for individual physical stocktake and confirmed delivery; dedicated local Lovelace card and secure service portal integration.
+
+
 ## 0.5.0 — 2026-10-31
 
 - Defines a complete linen set as pillowcase, flat sheet (Laken), fitted sheet, bath towel and hand towel; bath mats are explicitly separate.
