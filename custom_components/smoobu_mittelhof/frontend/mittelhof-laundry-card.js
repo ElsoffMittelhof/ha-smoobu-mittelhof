@@ -69,11 +69,9 @@
       for(const [name,id] of houses){
         const box=el("div",null,"house");housegrid.append(box);
         box.append(el("h3",name));
-        const select=el("select");
-        for(const [n,label] of [[0,"Nur einzelne Artikel"],[2,"2 Sets"],[4,"4 Sets"]]){
-          const opt=el("option",label);opt.value=String(n);select.append(opt);
-        }
-        select.value="2";box.append(select);
+        const select=el("input");select.type="number";select.min="0";select.max="8";select.step="1";select.value="2";
+        const setLabel=el("label",null,"quantity");setLabel.append(el("span","Vollständige Sets (0–8)"),select);
+        box.append(setLabel);
         box.append(el("p","Zusätzliche Einzelteile (inkl. Vorleger):","note"));
         const fields=el("div",null,"fields");
         keys.forEach(k=>fields.append(numberField(k,0)));
@@ -82,6 +80,7 @@
         btn.addEventListener("click",()=>{
           try{
             const sets=Number(select.value),items=read(fields);
+            if(!Number.isSafeInteger(sets)||sets<0||sets>8)throw Error("Ungültige Anzahl vollständiger Sets");
             if(sets===0&&!Object.values(items).some(v=>v>0))throw Error("Kein Wäscheverbrauch eingetragen.");
             this.execute("record_laundry_consumption",{apartment_id:id,sets,items},
               "Diesen Verbrauch für "+name+" wirklich abbuchen?");
