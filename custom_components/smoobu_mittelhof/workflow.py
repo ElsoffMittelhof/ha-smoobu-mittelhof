@@ -66,6 +66,15 @@ from .laundry_stock import (
     ensure_stock_state,
     reconcile_physical_stock,
     suggested_sets,
+    ITEM_KEYS,
+    ITEM_LABELS,
+    SET_ITEMS,
+    expand_items,
+    ensure_item_stock,
+    apply_article_consumption,
+    reconcile_article_inventory,
+    suggested_article_order,
+    receive_article_delivery,
 )
 from .mail import MailError
 from .templates import TemplateError
@@ -547,6 +556,7 @@ class WorkflowManager:
         )
         bath_mats = self._stock_option(CONF_LAUNDRY_REORDER_BATH_MATS, DEFAULT_LAUNDRY_REORDER_BATH_MATS)
         ensure_stock_state(stock, initial_sets, _iso_now(), today.isoformat(), self._stock_option(CONF_LAUNDRY_INITIAL_STOCK_MATS, DEFAULT_LAUNDRY_INITIAL_STOCK_MATS))
+        ensure_item_stock(stock, initial_sets, self._stock_option(CONF_LAUNDRY_INITIAL_STOCK_MATS, DEFAULT_LAUNDRY_INITIAL_STOCK_MATS))
         tracking_start = parse_date(stock.get("tracking_start_date")) or today
 
         for booking_id, booking in current.items():
@@ -615,8 +625,17 @@ class WorkflowManager:
         if not bool(self._option(CONF_LAUNDRY_ENABLED, DEFAULT_LAUNDRY_ENABLED)):
             return
 
-        unreplenished = int(stock.get("unreplenished_sets") or 0)
-        if unreplenished < threshold:
+
+        # v0.6 only proposes orders for articles at/below their own thresholds.
+        # Never send twice while an earlier order is still awaiting delivery.
+        in_transit = [
+            r for r in requests.values()
+            if r.get("inventory_mode") == "items_v1" and r.get("status") in {"sent", "partial_received", "sending"}
+        ]
+        if in_transit:
+            return
+        proposed = suggested_article_order(stock)
+        if not any(proposed.values()):
             return
 
         open_id, open_request = self._stock_open_request()
@@ -628,49 +647,37 @@ class WorkflowManager:
                 return
             if not force_notify:
                 last = _parse_dt(open_request.get("last_notified_at"))
-                reminder = timedelta(
-                    hours=int(self._option(CONF_LAUNDRY_REMINDER_HOURS, DEFAULT_LAUNDRY_REMINDER_HOURS))
-                )
-                if last and now - last < reminder:
+                interval = timedelta(hours=int(self._option(
+                    CONF_LAUNDRY_REMINDER_HOURS, DEFAULT_LAUNDRY_REMINDER_HOURS
+                )))
+                if last and now-last < interval:
                     return
-            request_id = open_id
+            request_id = str(open_id)
             open_request.update(
-                status="pending",
-                stock_sets=reorder_sets,
-                bath_mats=bath_mats,
-                unreplenished_sets=unreplenished,
-                snooze_until=None,
+                status="pending", inventory_mode="items_v1",
+                items=proposed, snooze_until=None,
             )
         else:
-            ignored_at = stock.get("last_ignored_unreplenished_sets")
-            if not force_notify and ignored_at is not None and int(ignored_at) == unreplenished:
-                return
-            request_id = _request_id("laundry_stock")
+            request_id = _request_id("laundry_items")
             requests[request_id] = {
-                "id": request_id,
-                "created_at": _iso_now(),
-                "status": "pending",
-                "mode": LAUNDRY_MODE_STOCK_SETS,
-                "booking_ids": [],
-                "stock_sets": reorder_sets,
-                "bath_mats": bath_mats,
-                "unreplenished_sets": unreplenished,
+                "id": request_id, "created_at": _iso_now(), "status": "pending",
+                "mode": LAUNDRY_MODE_STOCK_SETS, "inventory_mode": "items_v1",
+                "booking_ids": [], "items": proposed, "received_items": {},
             }
 
         if not force_notify and not self._notifications_allowed(now):
             return
-
-        available = int(stock.get("available_sets") or 0)
-        requests[str(request_id)]["last_notified_at"] = _iso_now()
+        requests[request_id]["last_notified_at"] = _iso_now()
+        description = "\n".join(
+            f"- {ITEM_LABELS[key]}: {quantity} Stk. (verfügbar: {stock['items'][key]})"
+            for key, quantity in proposed.items() if quantity
+        )
         await self._notify(
-            "Wäschebestand – Nachbestellung",
-            f"{unreplenished} Sets sind seit der letzten Auffüllung verbraucht.\n"
-            f"Aktueller rechnerischer Bestand: {available}/{initial_sets} Sets.\n\n"
-            f"Nachbestellen: {reorder_sets} komplette Sets + {bath_mats} Badvorleger?",
+            "Wäschebestand – Artikel nachbestellen",
+            f"Einzelartikel erreichen den Mindestbestand. Vorschlag:\n{description}\n\n"
+            "Nach dem Versand wird der Bestand erst bei der bestätigten Lieferung erhöht.",
             data={
-                "tag": "smoobu_laundry_stock",
-                "persistent": True,
-                "sticky": True,
+                "tag": "smoobu_laundry_stock", "persistent": True, "sticky": True,
                 "actions": [
                     {"action": f"{LAUNDRY_ACTION_PREFIX}_SEND_{request_id}", "title": "Bestellen"},
                     {"action": f"{LAUNDRY_ACTION_PREFIX}_LATER_{request_id}", "title": "Morgen erinnern"},
@@ -679,12 +686,14 @@ class WorkflowManager:
             },
         )
 
+
     async def async_record_laundry_consumption(
         self,
         apartment_id: int,
         used_sets: int,
         booking_id: str | None = None,
         used_mats: int = 0,
+        extra_items: dict[str, int] | None = None,
     ) -> None:
         """Record the cleaner-confirmed number of complete sets used for a checkout."""
         async with self._lock:
@@ -697,6 +706,7 @@ class WorkflowManager:
             )
             today = dt_util.now().date()
             ensure_stock_state(stock, initial_sets, _iso_now(), today.isoformat(), self._stock_option(CONF_LAUNDRY_INITIAL_STOCK_MATS, DEFAULT_LAUNDRY_INITIAL_STOCK_MATS))
+            ensure_item_stock(stock, initial_sets, self._stock_option(CONF_LAUNDRY_INITIAL_STOCK_MATS, DEFAULT_LAUNDRY_INITIAL_STOCK_MATS))
             consumptions = self.runtime.store.laundry_consumptions
 
             record: dict[str, Any] | None = None
@@ -732,7 +742,8 @@ class WorkflowManager:
                     "Keine offene oder noch korrigierbare Verbrauchserfassung für diese Unterkunft gefunden"
                 )
 
-            apply_consumption(stock, record, int(used_sets), _iso_now(), used_mats=int(used_mats))
+            articles = expand_items(int(used_sets), int(used_mats), extra_items)
+            apply_article_consumption(stock, record, articles, _iso_now(), sets=int(used_sets), mats=int(used_mats))
             await self._persist()
 
             bookings = valid_bookings(self.runtime.coordinator.data or [], self.runtime.houses)
@@ -752,8 +763,46 @@ class WorkflowManager:
                 stock, self._stock_option(CONF_LAUNDRY_INITIAL_STOCK_SETS, DEFAULT_LAUNDRY_INITIAL_STOCK_SETS),
                 now, today, self._stock_option(CONF_LAUNDRY_INITIAL_STOCK_MATS, DEFAULT_LAUNDRY_INITIAL_STOCK_MATS)
             )
-            reconcile_physical_stock(stock, sets, mats, now)
+            reconcile_article_inventory(stock, expand_items(sets, mats), now)
             await self._persist()
+
+    async def async_reconcile_laundry_items(self, items: dict[str, int]) -> None:
+        """Administrator-entered physical count for every article."""
+        async with self._lock:
+            if self._laundry_mode() != LAUNDRY_MODE_STOCK_SETS:
+                raise ValueError("Wäschemodus 'Lagerbestand / Sets' ist nicht aktiv")
+            stock = self.runtime.store.laundry_stock
+            ensure_stock_state(
+                stock, self._stock_option(CONF_LAUNDRY_INITIAL_STOCK_SETS, DEFAULT_LAUNDRY_INITIAL_STOCK_SETS),
+                _iso_now(), dt_util.now().date().isoformat(),
+                self._stock_option(CONF_LAUNDRY_INITIAL_STOCK_MATS, DEFAULT_LAUNDRY_INITIAL_STOCK_MATS),
+            )
+            reconcile_article_inventory(stock, items, _iso_now())
+            await self._persist()
+
+    async def async_receive_laundry_items(self, request_id: str, items: dict[str, int]) -> None:
+        """Add ONLY received goods to physical stock, with strict order-ID checks."""
+        async with self._lock:
+            request = self.runtime.store.laundry_requests.get(request_id)
+            if not request or request.get("inventory_mode") != "items_v1" or request.get("status") not in {"sent", "partial_received"}:
+                raise ValueError("Keine offene lieferbare Artikelbestellung mit dieser ID vorhanden")
+            stock = self.runtime.store.laundry_stock
+            received = receive_article_delivery(
+                stock, request["items"], request.get("received_items") or {}, items, _iso_now()
+            )
+            request["received_items"] = received
+            completed = all(received[key] == int(request["items"].get(key, 0)) for key in ITEM_KEYS)
+            request.update(
+                status="received" if completed else "partial_received",
+                last_received_at=_iso_now(), received_at=_iso_now() if completed else None,
+            )
+            await self._persist()
+            await self._notify(
+                "Wäscheeingang verbucht",
+                "Geliefert: " + ", ".join(
+                    f"{count} {ITEM_LABELS[key]}" for key, count in items.items() if count
+                ) + ". Verfügbarer Bestand wurde aktualisiert.",
+            )
 
     async def _async_stock_laundry_command_locked(
         self,
@@ -784,16 +833,18 @@ class WorkflowManager:
         if command != "send":
             raise ValueError(f"Unbekannter Wäsche-Befehl: {command}")
 
-        reorder_sets = int(request.get("stock_sets") or self._stock_option(
-            CONF_LAUNDRY_REORDER_QUANTITY_SETS, DEFAULT_LAUNDRY_REORDER_QUANTITY_SETS
-        ))
-        bath_mats = int(request.get("bath_mats") or self._stock_option(
-            CONF_LAUNDRY_REORDER_BATH_MATS, DEFAULT_LAUNDRY_REORDER_BATH_MATS
-        ))
 
+        if request.get("status") not in {"pending", "postponed", "email_error"}:
+            raise ValueError("Bestellung nicht mehr zur Freigabe verfügbar")
+        if request.get("inventory_mode") != "items_v1":
+            raise ValueError("Alte Set-Bestellung: zuerst den laufenden Lagerbestand prüfen")
+
+        ordered_items = request.get("items") or {}
+        if not any(int(v) for v in ordered_items.values()):
+            raise ValueError("Bestellung ohne Artikel ist nicht erlaubt")
         try:
             calculation = await self.hass.async_add_executor_job(
-                self.runtime.laundry.calculate_stock_order, reorder_sets, bath_mats
+                self.runtime.laundry.calculate_item_stock_order, ordered_items
             )
             template = await self.hass.async_add_executor_job(self.runtime.templates.load, "laundry_order")
             values = self._laundry_stock_template_values(calculation, stock)
@@ -809,21 +860,18 @@ class WorkflowManager:
         except (LaundryConfigError, TemplateError, MailError) as err:
             request.update(status="email_error", error_at=_iso_now(), last_error=str(err))
             await self._persist()
-            await self._notify(
-                "Wäsche-Mail NICHT versendet",
-                f"Die Lager-Nachbestellung ist fehlgeschlagen: {err}.",
-                data={"tag": "smoobu_laundry_stock"},
-            )
+            await self._notify("Wäsche-Mail NICHT versendet", f"Artikelbestellung fehlgeschlagen: {err}")
             return
 
-        sent_at = _iso_now()
-        request.update(status="sent", sent_at=sent_at, snooze_until=None, last_error=None)
-        apply_reorder(stock, reorder_sets, sent_at, bath_mats)
+        request.update(status="sent", sent_at=_iso_now(), received_items={}, snooze_until=None, last_error=None)
+        stock["last_order_at"] = _iso_now()
         await self._persist()
         await self._notify(
-            "Wäscheanforderung versendet",
-            f"{reorder_sets} Sets und {bath_mats} Badvorleger wurden bei der Wäscherei bestellt.",
+            "Wäsche bestellt – Wareneingang offen",
+            "Bestell-E-Mail versendet. Die Lagerbestände bleiben unverändert, bis die "
+            "tatsächliche Lieferung mit smoobu_mittelhof.receive_laundry_delivery verbucht wurde.",
         )
+
 
     def _laundry_stock_template_values(
         self,
@@ -839,9 +887,7 @@ class WorkflowManager:
         return {
             "mhLaundryDates": today,
             "mhLaundrySchedule": (
-                f"Lager-Nachbestellung: {order.get('sets', '')} komplette Sets "
-                f"+ {order.get('bath_mats', '')} Badvorleger. "
-                f"Bestand vor Bestellung: {stock.get('available_sets', '')} Sets."
+                "Einzelartikel-Nachbestellung. Lagerbestand wird erst nach bestätigtem Wareneingang erhöht."
             ),
             "mhLaundryProducts": "\n".join(product_lines),
             "mhLaundryNet": calculation.get("net", ""),
@@ -1398,6 +1444,18 @@ class WorkflowManager:
             ),
             "laundry_stock_available_sets": self.runtime.store.laundry_stock.get("available_sets"),
             "laundry_stock_available_mats": self.runtime.store.laundry_stock.get("available_mats"),
+            "laundry_stock_items": dict(ensure_item_stock(
+                self.runtime.store.laundry_stock,
+                self._stock_option(CONF_LAUNDRY_INITIAL_STOCK_SETS, DEFAULT_LAUNDRY_INITIAL_STOCK_SETS),
+                self._stock_option(CONF_LAUNDRY_INITIAL_STOCK_MATS, DEFAULT_LAUNDRY_INITIAL_STOCK_MATS),
+            )),
+            "laundry_stock_item_labels": ITEM_LABELS,
+            "laundry_stock_pending_deliveries": [
+                {"id": r.get("id"), "items": r.get("items"), "received_items": r.get("received_items", {})}
+                for r in self.runtime.store.laundry_requests.values()
+                if r.get("inventory_mode") == "items_v1"
+                and r.get("status") in {"sent", "partial_received"}
+            ],
             "laundry_stock_initial_mats": self.runtime.store.laundry_stock.get("initial_mats", self._stock_option(
                 CONF_LAUNDRY_INITIAL_STOCK_MATS, DEFAULT_LAUNDRY_INITIAL_STOCK_MATS
             )),
