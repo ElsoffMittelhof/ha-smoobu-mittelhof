@@ -20,6 +20,7 @@ from .const import (
     CONF_LAUNDRY_ENABLED,
     CONF_LAUNDRY_ORDER_MODE,
     CONF_LAUNDRY_INITIAL_STOCK_SETS,
+    CONF_LAUNDRY_INITIAL_STOCK_MATS,
     CONF_LAUNDRY_REORDER_AFTER_SETS,
     CONF_LAUNDRY_REORDER_QUANTITY_SETS,
     CONF_LAUNDRY_REORDER_BATH_MATS,
@@ -37,6 +38,7 @@ from .const import (
     DEFAULT_LAUNDRY_ENABLED,
     DEFAULT_LAUNDRY_ORDER_MODE,
     DEFAULT_LAUNDRY_INITIAL_STOCK_SETS,
+    DEFAULT_LAUNDRY_INITIAL_STOCK_MATS,
     DEFAULT_LAUNDRY_REORDER_AFTER_SETS,
     DEFAULT_LAUNDRY_REORDER_QUANTITY_SETS,
     DEFAULT_LAUNDRY_REORDER_BATH_MATS,
@@ -62,6 +64,7 @@ from .laundry_stock import (
     apply_consumption,
     apply_reorder,
     ensure_stock_state,
+    reconcile_physical_stock,
     suggested_sets,
 )
 from .mail import MailError
@@ -543,7 +546,7 @@ class WorkflowManager:
             CONF_LAUNDRY_REORDER_QUANTITY_SETS, DEFAULT_LAUNDRY_REORDER_QUANTITY_SETS
         )
         bath_mats = self._stock_option(CONF_LAUNDRY_REORDER_BATH_MATS, DEFAULT_LAUNDRY_REORDER_BATH_MATS)
-        ensure_stock_state(stock, initial_sets, _iso_now(), today.isoformat())
+        ensure_stock_state(stock, initial_sets, _iso_now(), today.isoformat(), self._stock_option(CONF_LAUNDRY_INITIAL_STOCK_MATS, DEFAULT_LAUNDRY_INITIAL_STOCK_MATS))
         tracking_start = parse_date(stock.get("tracking_start_date")) or today
 
         for booking_id, booking in current.items():
@@ -681,6 +684,7 @@ class WorkflowManager:
         apartment_id: int,
         used_sets: int,
         booking_id: str | None = None,
+        used_mats: int = 0,
     ) -> None:
         """Record the cleaner-confirmed number of complete sets used for a checkout."""
         async with self._lock:
@@ -692,7 +696,7 @@ class WorkflowManager:
                 CONF_LAUNDRY_INITIAL_STOCK_SETS, DEFAULT_LAUNDRY_INITIAL_STOCK_SETS
             )
             today = dt_util.now().date()
-            ensure_stock_state(stock, initial_sets, _iso_now(), today.isoformat())
+            ensure_stock_state(stock, initial_sets, _iso_now(), today.isoformat(), self._stock_option(CONF_LAUNDRY_INITIAL_STOCK_MATS, DEFAULT_LAUNDRY_INITIAL_STOCK_MATS))
             consumptions = self.runtime.store.laundry_consumptions
 
             record: dict[str, Any] | None = None
@@ -728,11 +732,27 @@ class WorkflowManager:
                     "Keine offene oder noch korrigierbare Verbrauchserfassung für diese Unterkunft gefunden"
                 )
 
-            apply_consumption(stock, record, int(used_sets), _iso_now())
+            apply_consumption(stock, record, int(used_sets), _iso_now(), used_mats=int(used_mats))
             await self._persist()
 
             bookings = valid_bookings(self.runtime.coordinator.data or [], self.runtime.houses)
             await self._process_laundry_stock(bookings, force_notify=False)
+            await self._persist()
+
+
+    async def async_reconcile_laundry_stock(self, sets: int, mats: int) -> None:
+        """Explicit manual stocktake; do not alter existing laundry order history."""
+        async with self._lock:
+            if self._laundry_mode() != LAUNDRY_MODE_STOCK_SETS:
+                raise ValueError("Wäschemodus 'Lagerbestand / Sets' ist nicht aktiv")
+            stock = self.runtime.store.laundry_stock
+            now = _iso_now()
+            today = dt_util.now().date().isoformat()
+            ensure_stock_state(
+                stock, self._stock_option(CONF_LAUNDRY_INITIAL_STOCK_SETS, DEFAULT_LAUNDRY_INITIAL_STOCK_SETS),
+                now, today, self._stock_option(CONF_LAUNDRY_INITIAL_STOCK_MATS, DEFAULT_LAUNDRY_INITIAL_STOCK_MATS)
+            )
+            reconcile_physical_stock(stock, sets, mats, now)
             await self._persist()
 
     async def _async_stock_laundry_command_locked(
@@ -798,7 +818,7 @@ class WorkflowManager:
 
         sent_at = _iso_now()
         request.update(status="sent", sent_at=sent_at, snooze_until=None, last_error=None)
-        apply_reorder(stock, reorder_sets, sent_at)
+        apply_reorder(stock, reorder_sets, sent_at, bath_mats)
         await self._persist()
         await self._notify(
             "Wäscheanforderung versendet",
@@ -1377,6 +1397,12 @@ class WorkflowManager:
                 CONF_LAUNDRY_REORDER_BATH_MATS, DEFAULT_LAUNDRY_REORDER_BATH_MATS
             ),
             "laundry_stock_available_sets": self.runtime.store.laundry_stock.get("available_sets"),
+            "laundry_stock_available_mats": self.runtime.store.laundry_stock.get("available_mats"),
+            "laundry_stock_initial_mats": self.runtime.store.laundry_stock.get("initial_mats", self._stock_option(
+                CONF_LAUNDRY_INITIAL_STOCK_MATS, DEFAULT_LAUNDRY_INITIAL_STOCK_MATS
+            )),
+            "laundry_stock_total_consumed_mats": self.runtime.store.laundry_stock.get("total_consumed_mats"),
+            "laundry_stock_total_reordered_mats": self.runtime.store.laundry_stock.get("total_reordered_mats"),
             "laundry_stock_unreplenished_sets": self.runtime.store.laundry_stock.get("unreplenished_sets"),
             "laundry_stock_total_consumed_sets": self.runtime.store.laundry_stock.get("total_consumed_sets"),
             "laundry_stock_total_reordered_sets": self.runtime.store.laundry_stock.get("total_reordered_sets"),
@@ -1498,6 +1524,8 @@ class WorkflowManager:
             "laundry_order_mode": LAUNDRY_MODE_STOCK_SETS,
             "stock_initial_sets": initial,
             "stock_available_sets": available,
+            "stock_available_mats": stock.get("available_mats"),
+            "stock_initial_mats": stock.get("initial_mats", DEFAULT_LAUNDRY_INITIAL_STOCK_MATS),
             "stock_unreplenished_sets": stock.get("unreplenished_sets"),
             "stock_reorder_after_sets": self._stock_option(
                 CONF_LAUNDRY_REORDER_AFTER_SETS, DEFAULT_LAUNDRY_REORDER_AFTER_SETS
@@ -1548,6 +1576,7 @@ class WorkflowManager:
                     "guest_count": record.get("guest_count"),
                     "suggested_sets": record.get("suggested_sets"),
                     "used_sets": record.get("used_sets"),
+                    "used_mats": record.get("used_mats", 0),
                     "workflow_status": "confirmed",
                     "correction_allowed": True,
                 }
