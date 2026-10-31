@@ -18,6 +18,8 @@ from .const import (
     SERVICE_LAUNDRY_COMMAND,
     SERVICE_RECORD_LAUNDRY_CONSUMPTION,
     SERVICE_RECONCILE_LAUNDRY_STOCK,
+    SERVICE_RECONCILE_LAUNDRY_ITEMS,
+    SERVICE_RECEIVE_LAUNDRY_DELIVERY,
     SERVICE_NUKI_COMMAND,
     SERVICE_PREVIEW_TEMPLATE,
     SERVICE_PROCESS_WORKFLOWS,
@@ -28,6 +30,7 @@ from .const import (
     SERVICE_SEND_TEST_EMAIL,
     SERVICE_SEND_TEST_NOTIFICATION,
 )
+from .laundry_stock import ITEM_KEYS
 from .runtime import SmoobuRuntime
 from .statistics import MODE_CALENDAR, MODE_NODE_RED, async_generate_statistics
 
@@ -137,15 +140,26 @@ async def async_register_services(hass: HomeAssistant) -> None:
         runtime = _runtime(hass)
         await runtime.workflow.async_record_laundry_consumption(
             int(call.data["apartment_id"]),
-            int(call.data["sets"]),
+            int(call.data.get("sets", 0)),
             str(call.data["booking_id"]) if call.data.get("booking_id") else None,
             int(call.data.get("mats", 0)),
+            dict(call.data.get("items") or {}),
         )
 
     async def reconcile_laundry_stock(call: ServiceCall) -> None:
         runtime = _runtime(hass)
         await runtime.workflow.async_reconcile_laundry_stock(
             int(call.data["sets"]), int(call.data["mats"])
+        )
+
+    async def reconcile_laundry_items(call: ServiceCall) -> None:
+        runtime = _runtime(hass)
+        await runtime.workflow.async_reconcile_laundry_items(dict(call.data["items"]))
+
+    async def receive_laundry_delivery(call: ServiceCall) -> None:
+        runtime = _runtime(hass)
+        await runtime.workflow.async_receive_laundry_items(
+            str(call.data["request_id"]), dict(call.data["items"])
         )
 
     async def nuki_command(call: ServiceCall) -> None:
@@ -253,7 +267,8 @@ async def async_register_services(hass: HomeAssistant) -> None:
         record_laundry_consumption,
         schema=vol.Schema({
             vol.Required("apartment_id"): vol.Coerce(int),
-            vol.Required("sets"): vol.All(vol.Coerce(int), vol.Range(min=0, max=8)),
+            vol.Optional("sets", default=0): vol.All(vol.Coerce(int), vol.Range(min=0, max=24)),
+            vol.Optional("items", default=dict): vol.Schema({vol.Optional(key): vol.All(vol.Coerce(int), vol.Range(min=0, max=100)) for key in ITEM_KEYS}),
             vol.Optional("mats", default=0): vol.All(vol.Coerce(int), vol.Range(min=0, max=6)),
             vol.Optional("booking_id"): str,
         }),
@@ -265,6 +280,23 @@ async def async_register_services(hass: HomeAssistant) -> None:
         schema=vol.Schema({
             vol.Required("sets"): vol.All(vol.Coerce(int), vol.Range(min=0, max=500)),
             vol.Required("mats"): vol.All(vol.Coerce(int), vol.Range(min=0, max=500)),
+        }),
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_RECONCILE_LAUNDRY_ITEMS,
+        reconcile_laundry_items,
+        schema=vol.Schema({
+            vol.Required("items"): vol.Schema({vol.Required(key): vol.All(vol.Coerce(int), vol.Range(min=0, max=10000)) for key in ITEM_KEYS}),
+        }),
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_RECEIVE_LAUNDRY_DELIVERY,
+        receive_laundry_delivery,
+        schema=vol.Schema({
+            vol.Required("request_id"): str,
+            vol.Required("items"): vol.Schema({vol.Optional(key): vol.All(vol.Coerce(int), vol.Range(min=0, max=10000)) for key in ITEM_KEYS}),
         }),
     )
     hass.services.async_register(
