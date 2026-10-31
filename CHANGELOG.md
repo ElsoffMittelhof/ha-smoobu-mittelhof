@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.5.0 — 2026-10-31
+
+- Defines a complete linen set as pillowcase, flat sheet (Laken), fitted sheet, bath towel and hand towel; bath mats are explicitly separate.
+- Adds initial tracked stock of 6 bath mats alongside the existing 24 sets without deleting existing consumption/order history.
+- Adds optional `mats` consumption (0–6) and independent stock/correction/replenishment accounting.
+- Adds Home Assistant action `smoobu_mittelhof.reconcile_laundry_stock` for deliberate physical stocktake corrections of both balances.
+- Updates the laundry product example and stock-order product-name inference; local `laundry.yaml` must be reviewed separately (not overwritten by HACS).
+- The usual reorder threshold remains based on consumed sets. Bath mats per order remain independently configurable.
+
+
 ## 0.4.1 — 2026-10-03
 
 - IT.NRW statistics now use the real calendar month by default instead of the legacy Node-RED-compatible shifted period.
