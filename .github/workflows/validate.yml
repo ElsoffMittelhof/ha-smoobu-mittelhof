@@ -28,6 +28,8 @@ jobs:
           node-version: "22"
       - name: Check timeline card JavaScript
         run: node --check custom_components/smoobu_mittelhof/frontend/smoobu-timeline-card.js
+      - name: Check laundry card JavaScript
+        run: node --check custom_components/smoobu_mittelhof/frontend/mittelhof-laundry-card.js
 
   hassfest:
     runs-on: ubuntu-latest
