@@ -41,6 +41,14 @@ products:
 # Anfangsbestand nach Bestandsaufnahme: 24 Sets, 6 Badvorleger.
 # Preise hier sind nur Platzhalter; örtliche Wäschereipreise separat eintragen.
 stock_order:
+  # Explicit unique supplier product keys, checked before supplier emails are sent.
+  item_products:
+    pillowcase: pillowcase
+    flat_sheet: flat_sheet
+    fitted_sheet: fitted_sheet
+    bath_towel: bath_towel
+    towel: towel
+    bath_mat: bath_mat
   set_products:
     flat_sheet: 1
     fitted_sheet: 1
