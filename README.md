@@ -2,7 +2,7 @@
 
 Custom Home Assistant integration for Smoobu reservations, booking calendars, laundry approval workflows, NUKI guest-code emails, and optional IT.NRW monthly statistics.
 
-Current public version: **0.4.1**.
+Current public version: **0.5.0**.
 
 > Technical note: the integration domain remains `smoobu_mittelhof` for compatibility with installations from the private pre-release phase. The public integration contains no property-specific apartment IDs, email addresses, Home Assistant entity IDs, API credentials, or SMTP credentials.
 
@@ -75,6 +75,7 @@ Stock mode defaults to:
 
 ```text
 Initial stock:       24 complete sets
+Initial bath mats:   6 (separate items)
 Reorder threshold:   12 consumed sets
 Reorder quantity:    12 complete sets
 Bath mats per order: 3
@@ -85,7 +86,7 @@ Suggested use:
 3+ guests = 4 sets
 ```
 
-A complete set is defined by the installation's `stock_order.set_products` mapping. A typical set contains one fitted sheet, one pillowcase, one duvet cover, one large towel and one small towel.
+A complete set for Mittelhof consists of **one pillowcase, one flat sheet (Laken), one fitted sheet (Spannbetttuch), one bath towel and one regular hand towel**. **Bath mats are counted independently** and are not included in the set.
 
 The cleaner records actual use with the Home Assistant action:
 
@@ -100,13 +101,29 @@ For stock mode, add an explicit mapping to the local `laundry.yaml` where possib
 ```yaml
 stock_order:
   set_products:
-    duvet_cover: 1
-    sheet: 1
+    flat_sheet: 1
+    fitted_sheet: 1
     pillowcase: 1
     towel: 1
     bath_towel: 1
   bath_mat_product: bath_mat
 ```
+
+**Upgrade 0.4.1 → 0.5.0**: Previous consumption/order histories and available set counts remain unchanged. Six bath mats are initialized once on upgrade if the old state did not track them. In Home Assistant, configure **Wäschebestellmodus: Lagerbestand / Sets**, initial stock 24 sets and 6 bath mats. To set a physically verified current count **without resetting history**, deliberately execute the new action:
+
+```yaml
+action: smoobu_mittelhof.reconcile_laundry_stock
+data:
+  sets: 24
+  mats: 6
+```
+
+**Do not execute the inventory correction during a read-only integration test**; it is a writing action. It should be run exactly once after verifying the physical count and the current HA stock values.
+
+**New consumption input**: the existing action accepts an additional `mats` field (0–6, default 0), separately from `sets`. The existing booking correction rules remain in force; entering a correction must include the intended complete mat count, otherwise the default 0 is used. Orders still follow the previously configured set threshold and add the separately configured bath mat quantity. The integration currently considers an emailed reorder as already replenished, as in v0.4.1; verify actual deliveries manually.
+
+**Important for existing local laundry.yaml:** the actual `/config/smoobu_workflow/laundry.yaml` (or existing legacy configuration folder) is *not* updated automatically by HACS. Adjust `stock_order.set_products` to match your local product keys for Laken and Spannbetttuch, and verify the actual laundry prices. If the old config contains `duvet_cover`, do not silently substitute that product for `flat_sheet`; add/correct the local product catalog explicitly.
+
 
 The public integration also includes a backwards-compatible name-based product inference for common German and English product names.
 
