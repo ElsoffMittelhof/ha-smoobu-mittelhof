@@ -197,6 +197,69 @@ class LaundryRepository:
             },
         }
 
+
+    def calculate_item_stock_order(self, items: dict[str, int]) -> dict[str, Any]:
+        """Price precisely the six individual articles from the *local* laundry.yaml.
+
+        Never silently replace an unrecognised flat sheet with a duvet cover.
+        An invalid/missing product mapping blocks emailing the supplier.
+        """
+        from .laundry_stock import ITEM_KEYS, SET_ITEMS
+        if not isinstance(items, dict) or set(items) - set(ITEM_KEYS):
+            raise LaundryConfigError("Unknown laundry article")
+        if not any(items.values()) or any(type(v) is not int or v < 0 or v > 500 for v in items.values()):
+            raise LaundryConfigError("Article order quantities must be positive integers <= 500")
+        cfg = self.load()
+        products = cfg.get("products") or {}
+        stock = cfg.get("stock_order") or {}
+        product_keys = stock.get("item_products") or {}
+        if product_keys:
+            if not isinstance(product_keys, dict):
+                raise LaundryConfigError("stock_order.item_products must be a mapping")
+            mapping = {key: str(product_keys.get(key) or "") for key in ITEM_KEYS}
+        else:
+            # Strict fallback for installations using the v0.5 explicit mapping.
+            by_set = stock.get("set_products") or {}
+            if not isinstance(by_set, dict):
+                raise LaundryConfigError("stock_order.set_products must be a mapping")
+            if all(key in products and by_set.get(key) == 1 for key in SET_ITEMS):
+                mapping = {key: key for key in SET_ITEMS}
+                mapping["bath_mat"] = str(stock.get("bath_mat_product") or "bath_mat")
+            else:
+                inferred, mat = self._infer_stock_products(products)
+                if len(inferred) != 5 or len(set(inferred)) != 5:
+                    raise LaundryConfigError("Unique flat sheet and fitted sheet required")
+                mapping = {key: key for key in ITEM_KEYS if key in products}
+                mapping["bath_mat"] = str(mat or "")
+                if not all(mapping.get(key) and mapping[key] in products for key in ITEM_KEYS):
+                    raise LaundryConfigError("Configure stock_order.item_products for all six articles")
+        if len(set(mapping.values())) != len(ITEM_KEYS) or any(not key or key not in products for key in mapping.values()):
+            raise LaundryConfigError("Six unique stock_order.item_products entries are required")
+        quantity_by_product = {mapping[key]: int(items.get(key, 0)) for key in ITEM_KEYS if int(items.get(key, 0))}
+        vat_percent = Decimal(str(cfg.get("vat_percent", 19)))
+        net = Decimal("0")
+        lines = []
+        for key, qty in quantity_by_product.items():
+            product = products[key]
+            unit = Decimal(str(product.get("net_unit_price", product.get("unit_price", 0))))
+            line = (unit * qty).quantize(CENT, rounding=ROUND_HALF_UP)
+            net += line
+            lines.append({
+                "key": key, "position": product.get("position"),
+                "name": product.get("name", key), "unit": product.get("unit", "Stk"),
+                "quantity": str(qty), "net_unit_price": f"{unit.quantize(CENT):.2f}",
+                "net_total": f"{line:.2f}",
+            })
+        lines.sort(key=lambda x: (x["position"] is None, x["position"] or 9999))
+        net = net.quantize(CENT, rounding=ROUND_HALF_UP)
+        vat = (net * vat_percent / 100).quantize(CENT, rounding=ROUND_HALF_UP)
+        return {
+            "houses": [], "products": lines, "net": f"{net:.2f}",
+            "vat_percent": str(vat_percent.normalize()), "vat": f"{vat:.2f}",
+            "gross": f"{net + vat:.2f}", "currency": str(cfg.get("currency") or "EUR"),
+            "stock_order": {"items": dict(items)},
+        }
+
     @staticmethod
     def _infer_stock_products(products: dict[str, Any]) -> tuple[dict[str, Decimal], str | None]:
         """Infer the five set components and bath mat from common product names."""
