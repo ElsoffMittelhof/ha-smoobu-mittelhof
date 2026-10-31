@@ -61,7 +61,8 @@
           "laundry_initial_stock_sets": "Initialer Bestand vollständiger Sets",
           "laundry_reorder_after_sets": "Nachbestellung nach verbrauchten Sets",
           "laundry_reorder_quantity_sets": "Sets je Nachbestellung",
-          "laundry_reorder_bath_mats": "Badvorleger je Nachbestellung"
+          "laundry_reorder_bath_mats": "Badvorleger je Nachbestellung",
+          "laundry_initial_stock_mats": "Initialer Bestand Badvorleger (separat)"
         }
       }
     },
