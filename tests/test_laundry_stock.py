@@ -11,6 +11,7 @@ apply_consumption = module.apply_consumption
 apply_reorder = module.apply_reorder
 ensure_stock_state = module.ensure_stock_state
 suggested_sets = module.suggested_sets
+reconcile_physical_stock = module.reconcile_physical_stock
 
 
 def run() -> None:
@@ -22,6 +23,7 @@ def run() -> None:
     state = {}
     ensure_stock_state(state, 24, "2026-09-19T10:00:00+02:00", "2026-09-19")
     assert state["available_sets"] == 24
+    assert state["available_mats"] == 6
 
     first, second, third = {}, {}, {}
     apply_consumption(state, first, 4, "2026-09-20T10:00:00+02:00")
@@ -41,6 +43,28 @@ def run() -> None:
     apply_consumption(correction_state, record, 2, "later")
     assert correction_state["available_sets"] == 22
     assert correction_state["unreplenished_sets"] == 2
+
+    # Mats are separate from complete five-piece sets.
+    mats = {}
+    ensure_stock_state(mats, 24, "now", "2026-10-31", 6)
+    item = {}
+    apply_consumption(mats, item, 2, "now", used_mats=1)
+    assert (mats["available_sets"], mats["available_mats"]) == (22, 5)
+    apply_consumption(mats, item, 4, "later", used_mats=2)
+    assert (mats["available_sets"], mats["available_mats"]) == (20, 4)
+    apply_consumption(mats, item, 2, "corrected", used_mats=0)
+    assert (mats["available_sets"], mats["available_mats"]) == (22, 6)
+    reconcile_physical_stock(mats, 24, 6, "inventory")
+    assert (mats["available_sets"], mats["available_mats"]) == (24, 6)
+    apply_reorder(mats, 12, "order", reorder_mats=3)
+    assert (mats["available_sets"], mats["available_mats"]) == (36, 9)
+
+    legacy = {"initialized": True, "available_sets": 9}
+    ensure_stock_state(legacy, 24, "now", "2026-10-31", 6)
+    assert legacy["available_sets"] == 9
+    assert legacy["available_mats"] == 6
+    ensure_stock_state(legacy, 24, "later", "2026-11-01", 99)
+    assert legacy["available_mats"] == 6
 
     locked_state = {}
     ensure_stock_state(locked_state, 24, "now", "2026-09-19")
