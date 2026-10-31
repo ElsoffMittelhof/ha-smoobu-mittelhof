@@ -4,7 +4,7 @@ currency: EUR
 vat_percent: 19
 
 products:
-  flat_fitted_sheet:
+  flat_sheet:
     position: 1
     name: Laken
     unit: Stk
@@ -42,7 +42,7 @@ products:
 # Preise hier sind nur Platzhalter; örtliche Wäschereipreise separat eintragen.
 stock_order:
   set_products:
-    flat_fitted_sheet: 1
+    flat_sheet: 1
     fitted_sheet: 1
     pillowcase: 1
     towel: 1
@@ -54,7 +54,7 @@ houses:
     name: Apartment A
     enabled: false
     laundry:
-      flat_fitted_sheet: 2
+      flat_sheet: 2
       fitted_sheet: 2
       pillowcase: 2
       towel: 2
@@ -65,7 +65,7 @@ houses:
     name: Apartment B
     enabled: false
     laundry:
-      flat_fitted_sheet: 4
+      flat_sheet: 4
       fitted_sheet: 4
       pillowcase: 4
       towel: 4
