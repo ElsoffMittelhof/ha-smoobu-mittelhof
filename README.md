@@ -2,7 +2,7 @@
 
 Custom Home Assistant integration for Smoobu reservations, booking calendars, laundry approval workflows, NUKI guest-code emails, and optional IT.NRW monthly statistics.
 
-Current public version: **0.5.0**.
+Current public version: **0.6.0**.
 
 > Technical note: the integration domain remains `smoobu_mittelhof` for compatibility with installations from the private pre-release phase. The public integration contains no property-specific apartment IDs, email addresses, Home Assistant entity IDs, API credentials, or SMTP credentials.
 
@@ -127,6 +127,93 @@ data:
 
 The public integration also includes a backwards-compatible name-based product inference for common German and English product names.
 
+
+## v0.6.0 – individual articles, set shortcut and confirmed deliveries
+
+The six independent item keys are `pillowcase`, `flat_sheet`, `fitted_sheet`,
+`bath_towel`, `towel` and `bath_mat`. The first five form one complete set; the
+bath mat is not included in sets. Existing users who have 24 complete sets and
+6 bath mats will migrate without losing previous transactions.
+
+A physical count of **24 sets + 6 bath mats** corresponds to counts of
+`24` for each of the five set articles and `6` for `bath_mat`.
+Already initialised stock is migrated from its **current** available balances,
+not forcibly overwritten with the initial values.
+
+The new HA card is available as a JavaScript module:
+
+```text
+/smoobu_mittelhof/frontend/mittelhof-laundry-card.js
+```
+
+Add this URL under **Settings → Dashboards → Resources** once, with resource
+type **JavaScript module**, and add the card type
+`custom:mittelhof-laundry-card` to the Reinigung dashboard (already included
+in the Mittelhof dashboard repository).
+
+Cleaning staff use the secure Mittelhof portal to choose **0–8 complete sets**
+and/or extra individual article quantities. The underlying service also accepts
+the equivalent structured data from local HA:
+
+```yaml
+action: smoobu_mittelhof.record_laundry_consumption
+data:
+  apartment_id: 1046730
+  sets: 2
+  items:
+    towel: 1
+    bath_mat: 1
+```
+
+This would consume two of *each* set component, **one additional hand towel**
+and **one bath mat**. Calling the consumption service makes a real stock
+change and therefore is NOT suitable as a harmless connection test.
+
+**Order lifecycle:** when any of the first five articles reaches **12 or fewer**
+clean pieces or bath mats reach **2 or fewer**, an order suggestion is generated.
+The suggested quantity raises only the low article(s) to the desired targets
+(24 each, 6 bath mats). An administrator explicitly approves sending an email
+using the existing `smoobu_mittelhof.laundry_command` service or HA card.
+**Sending does NOT increase available stock.** Open deliveries appear in the HA
+card and in the admin portal. Confirm the actual arrival (including partial
+deliveries) using:
+
+```yaml
+action: smoobu_mittelhof.receive_laundry_delivery
+data:
+  request_id: laundry_items_REAL_REQUEST_ID
+  items:
+    towel: 5
+    bath_mat: 2
+```
+
+Only the actually received quantities are credited. Replaying a fulfilled
+delivery is blocked. Service-portal staff cannot send supplier emails or
+perform inventory corrections.
+
+**Administrator stocktake** requires all six physical counts:
+
+```yaml
+action: smoobu_mittelhof.reconcile_laundry_items
+data:
+  items:
+    pillowcase: 24
+    flat_sheet: 24
+    fitted_sheet: 24
+    bath_towel: 24
+    towel: 24
+    bath_mat: 6
+```
+
+This overwrites the **available inventory**, not historical consumption or
+supplier order records. Only run it after a physical count; do not use it for
+the read-only Node-RED connection test.
+
+The actual local `laundry.yaml` file is **never overwritten by HACS**. Before
+sending any supplier order, ensure `stock_order.item_products` maps all six
+keys to six **different real supplier products**, including distinct Laken
+and Spannbetttuch. Confirm the original unit prices and supplier contact
+details.
 
 ## Timeline card
 
