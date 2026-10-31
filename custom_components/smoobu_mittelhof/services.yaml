@@ -110,7 +110,7 @@ laundry_command:
 
 record_laundry_consumption:
   name: Wäscheverbrauch erfassen
-  description: Erfasst den tatsächlich verbrauchten Satzbestand für die älteste offene Reinigung einer Unterkunft. Im Lagerbestandsmodus wird damit der Bestand reduziert.
+  description: Erfasst vollständige fünfteilige Sets und separat gezählte Badvorleger für die älteste offene Reinigung einer Unterkunft.
   fields:
     apartment_id:
       required: true
@@ -124,6 +124,16 @@ record_laundry_consumption:
         number:
           min: 0
           max: 8
+          step: 1
+          mode: box
+    mats:
+      required: false
+      default: 0
+      description: Anzahl separat verbrauchter Badvorleger (0–6).
+      selector:
+        number:
+          min: 0
+          max: 6
           step: 1
           mode: box
     booking_id:
@@ -179,3 +189,22 @@ reset_all_workflow_state:
 send_test_notification:
   name: Test-Push senden
   description: Sendet eine Test-Benachrichtigung über den in der Integration eingestellten Notify-Service.
+
+reconcile_laundry_stock:
+  name: Wäschebestand nach Inventur korrigieren
+  description: Setzt den tatsächlich gezählten verfügbaren Bestand von Sets und Badvorlegern explizit. Historische Buchungen bleiben erhalten. Nicht zum Testen ausführen.
+  fields:
+    sets:
+      required: true
+      selector:
+        number:
+          min: 0
+          max: 500
+          mode: box
+    mats:
+      required: true
+      selector:
+        number:
+          min: 0
+          max: 500
+          mode: box
