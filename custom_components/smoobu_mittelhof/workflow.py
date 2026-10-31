@@ -1450,6 +1450,12 @@ class WorkflowManager:
                 self._stock_option(CONF_LAUNDRY_INITIAL_STOCK_MATS, DEFAULT_LAUNDRY_INITIAL_STOCK_MATS),
             )),
             "laundry_stock_item_labels": ITEM_LABELS,
+            "laundry_stock_pending_orders": [
+                {"id": r.get("id"), "items": r.get("items"), "status": r.get("status")}
+                for r in self.runtime.store.laundry_requests.values()
+                if r.get("inventory_mode") == "items_v1"
+                and r.get("status") in {"pending", "postponed", "email_error"}
+            ],
             "laundry_stock_pending_deliveries": [
                 {"id": r.get("id"), "items": r.get("items"), "received_items": r.get("received_items", {})}
                 for r in self.runtime.store.laundry_requests.values()
