@@ -63,7 +63,7 @@
           "laundry_reorder_quantity_sets": "Sets per replenishment order",
           "laundry_reorder_bath_mats": "Bath mats per replenishment order",
           "laundry_initial_stock_mats": "Initial stock of bath mats (tracked separately)",
-          "laundry_tracking_start": "Start recording laundry consumption (YYYY-MM-DD), Mittelhof 2026-12-01"
+          "laundry_tracking_start": "Laundry checkouts from (YYYY-MM-DD), current operation from 2026-11-01"
         }
       }
     },
