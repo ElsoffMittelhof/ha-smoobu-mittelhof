@@ -75,6 +75,7 @@ from .laundry_stock import (
     reconcile_article_inventory,
     suggested_article_order,
     receive_article_delivery,
+    select_laundry_consumption,
 )
 from .mail import MailError
 from .templates import TemplateError
@@ -709,37 +710,15 @@ class WorkflowManager:
             ensure_item_stock(stock, initial_sets, self._stock_option(CONF_LAUNDRY_INITIAL_STOCK_MATS, DEFAULT_LAUNDRY_INITIAL_STOCK_MATS))
             consumptions = self.runtime.store.laundry_consumptions
 
-            record: dict[str, Any] | None = None
-            if booking_id:
-                candidate = consumptions.get(str(booking_id))
-                if candidate and int(candidate.get("apartment_id") or 0) == int(apartment_id):
-                    record = candidate
-            else:
-                pending = [
-                    item for item in consumptions.values()
-                    if int(item.get("apartment_id") or 0) == int(apartment_id)
-                    and item.get("status") == "awaiting_confirmation"
-                ]
-                pending.sort(key=lambda item: str(item.get("departure") or ""))
-                record = pending[0] if pending else None
-
-                # If the cleaner notices a mistake immediately after confirming,
-                # allow the latest confirmation of the current stock generation
-                # to be corrected without requiring a booking ID.
-                if record is None:
-                    generation = int(stock.get("reorder_generation") or 0)
-                    confirmed = [
-                        item for item in consumptions.values()
-                        if int(item.get("apartment_id") or 0) == int(apartment_id)
-                        and item.get("status") == "confirmed"
-                        and int(item.get("reorder_generation") or 0) == generation
-                    ]
-                    confirmed.sort(key=lambda item: str(item.get("confirmed_at") or ""), reverse=True)
-                    record = confirmed[0] if confirmed else None
+            # Only an open checkout may be booked without a booking_id.
+            # Corrections of already confirmed checkouts require the explicit ID.
+            record = select_laundry_consumption(
+                consumptions, int(apartment_id), str(booking_id) if booking_id else None
+            )
 
             if not record:
                 raise ValueError(
-                    "Keine offene oder noch korrigierbare Verbrauchserfassung für diese Unterkunft gefunden"
+                    "Keine offene Reinigung gefunden. Bereits bestätigte Buchungen nur mit ausdrücklicher booking_id korrigieren."
                 )
 
             articles = expand_items(int(used_sets), int(used_mats), extra_items)
