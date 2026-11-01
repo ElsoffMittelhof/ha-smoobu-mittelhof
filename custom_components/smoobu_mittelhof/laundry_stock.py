@@ -248,3 +248,31 @@ def receive_article_delivery(
     state["reorder_generation"] = int(state.get("reorder_generation") or 0) + 1
     state["last_delivery_at"] = now_iso
     return new_received
+
+def select_laundry_consumption(
+    consumptions: dict[str, dict[str, Any]],
+    apartment_id: int,
+    booking_id: str | None = None,
+) -> dict[str, Any] | None:
+    """Select only a pending checkout, unless a specific booking ID is given.
+
+    Never quietly modify the latest *already confirmed* checkout when another
+    staff member clicks "record" after the pending queue was emptied.
+    An intentional correction requires the explicit booking ID.
+    """
+    if booking_id:
+        record = consumptions.get(str(booking_id))
+        if (
+            record is not None
+            and int(record.get("apartment_id") or 0) == int(apartment_id)
+            and record.get("status") in {"awaiting_confirmation", "confirmed"}
+        ):
+            return record
+        return None
+
+    pending = [
+        item for item in consumptions.values()
+        if int(item.get("apartment_id") or 0) == int(apartment_id)
+        and item.get("status") == "awaiting_confirmation"
+    ]
+    return min(pending, key=lambda item: str(item.get("departure") or "")) if pending else None
