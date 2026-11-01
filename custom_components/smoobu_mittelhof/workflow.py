@@ -21,6 +21,7 @@ from .const import (
     CONF_LAUNDRY_ORDER_MODE,
     CONF_LAUNDRY_INITIAL_STOCK_SETS,
     CONF_LAUNDRY_INITIAL_STOCK_MATS,
+    CONF_LAUNDRY_TRACKING_START,
     CONF_LAUNDRY_REORDER_AFTER_SETS,
     CONF_LAUNDRY_REORDER_QUANTITY_SETS,
     CONF_LAUNDRY_REORDER_BATH_MATS,
@@ -39,6 +40,7 @@ from .const import (
     DEFAULT_LAUNDRY_ORDER_MODE,
     DEFAULT_LAUNDRY_INITIAL_STOCK_SETS,
     DEFAULT_LAUNDRY_INITIAL_STOCK_MATS,
+    DEFAULT_LAUNDRY_TRACKING_START,
     DEFAULT_LAUNDRY_REORDER_AFTER_SETS,
     DEFAULT_LAUNDRY_REORDER_QUANTITY_SETS,
     DEFAULT_LAUNDRY_REORDER_BATH_MATS,
@@ -76,6 +78,7 @@ from .laundry_stock import (
     suggested_article_order,
     receive_article_delivery,
     select_laundry_consumption,
+    exclude_historical_consumptions,
 )
 from .mail import MailError
 from .templates import TemplateError
@@ -558,7 +561,15 @@ class WorkflowManager:
         bath_mats = self._stock_option(CONF_LAUNDRY_REORDER_BATH_MATS, DEFAULT_LAUNDRY_REORDER_BATH_MATS)
         ensure_stock_state(stock, initial_sets, _iso_now(), today.isoformat(), self._stock_option(CONF_LAUNDRY_INITIAL_STOCK_MATS, DEFAULT_LAUNDRY_INITIAL_STOCK_MATS))
         ensure_item_stock(stock, initial_sets, self._stock_option(CONF_LAUNDRY_INITIAL_STOCK_MATS, DEFAULT_LAUNDRY_INITIAL_STOCK_MATS))
-        tracking_start = parse_date(stock.get("tracking_start_date")) or today
+        # Explicit operational start. Keep the previously initialized stock and
+        # history intact, but archive old unconfirmed cleanings from the queue.
+        tracking_start = parse_date(
+            self._option(CONF_LAUNDRY_TRACKING_START, DEFAULT_LAUNDRY_TRACKING_START)
+        )
+        if tracking_start is None:
+            raise ValueError("Ungültiger Erfassungsbeginn für die Wäscheverwaltung")
+        stock["tracking_start_date"] = tracking_start.isoformat()
+        exclude_historical_consumptions(consumptions, tracking_start.isoformat())
 
         for booking_id, booking in current.items():
             apartment = booking.get("apartment") or {}
@@ -701,6 +712,15 @@ class WorkflowManager:
             if self._laundry_mode() != LAUNDRY_MODE_STOCK_SETS:
                 raise ValueError("Wäschemodus 'Lagerbestand / Sets' ist nicht aktiv")
 
+            tracking_start = parse_date(
+                self._option(CONF_LAUNDRY_TRACKING_START, DEFAULT_LAUNDRY_TRACKING_START)
+            )
+            if tracking_start is None or dt_util.now().date() < tracking_start:
+                raise ValueError(
+                    "Echte Wäscheverbrauchserfassung beginnt erst am "
+                    + (tracking_start.isoformat() if tracking_start else "konfigurierten Datum")
+                    + ". Bis dahin ausschließlich Simulation verwenden."
+                )
             stock = self.runtime.store.laundry_stock
             initial_sets = self._stock_option(
                 CONF_LAUNDRY_INITIAL_STOCK_SETS, DEFAULT_LAUNDRY_INITIAL_STOCK_SETS
@@ -721,6 +741,8 @@ class WorkflowManager:
                     "Keine offene Reinigung gefunden. Bereits bestätigte Buchungen nur mit ausdrücklicher booking_id korrigieren."
                 )
 
+            if parse_date(record.get("departure")) is None or parse_date(record["departure"]) < tracking_start:
+                raise ValueError("Reinigung liegt vor dem Wäsche-Erfassungsbeginn")
             articles = expand_items(int(used_sets), int(used_mats), extra_items)
             apply_article_consumption(stock, record, articles, _iso_now(), sets=int(used_sets), mats=int(used_mats))
             await self._persist()
@@ -1423,6 +1445,14 @@ class WorkflowManager:
             ),
             "laundry_stock_available_sets": self.runtime.store.laundry_stock.get("available_sets"),
             "laundry_stock_available_mats": self.runtime.store.laundry_stock.get("available_mats"),
+            "laundry_tracking_start_date": self._option(
+                CONF_LAUNDRY_TRACKING_START, DEFAULT_LAUNDRY_TRACKING_START
+            ),
+            "laundry_tracking_active": dt_util.now().date() >= (
+                parse_date(self._option(
+                    CONF_LAUNDRY_TRACKING_START, DEFAULT_LAUNDRY_TRACKING_START
+                )) or dt_util.now().date()
+            ),
             "laundry_stock_items": dict(ensure_item_stock(
                 self.runtime.store.laundry_stock,
                 self._stock_option(CONF_LAUNDRY_INITIAL_STOCK_SETS, DEFAULT_LAUNDRY_INITIAL_STOCK_SETS),
@@ -1452,6 +1482,9 @@ class WorkflowManager:
             "laundry_consumptions_pending": sum(
                 1 for item in self.runtime.store.laundry_consumptions.values()
                 if item.get("status") == "awaiting_confirmation"
+                and str(item.get("departure") or "") >= self._option(
+                    CONF_LAUNDRY_TRACKING_START, DEFAULT_LAUNDRY_TRACKING_START
+                )
             ),
             "nuki_enabled": bool(self._option(CONF_NUKI_ENABLED, DEFAULT_NUKI_ENABLED)),
             "notification_start_hour": start,
@@ -1556,10 +1589,14 @@ class WorkflowManager:
             CONF_LAUNDRY_INITIAL_STOCK_SETS, DEFAULT_LAUNDRY_INITIAL_STOCK_SETS
         )
         available = stock.get("available_sets")
+        start_date = self._option(
+            CONF_LAUNDRY_TRACKING_START, DEFAULT_LAUNDRY_TRACKING_START
+        )
         pending = [
             item for item in self.runtime.store.laundry_consumptions.values()
             if int(item.get("apartment_id") or 0) == int(apartment_id)
             and item.get("status") == "awaiting_confirmation"
+            and str(item.get("departure") or "") >= start_date
         ]
         pending.sort(key=lambda item: str(item.get("departure") or ""))
         attrs = {
