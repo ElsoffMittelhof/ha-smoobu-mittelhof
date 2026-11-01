@@ -101,6 +101,17 @@ def run() -> None:
     assert art_state["items"]["pillowcase"] == 24
     assert art_state["items"]["bath_mat"] == 6
 
+    # A zero-quantity checkout is a genuine completion, with no stock mutation.
+    zero_state = {"initialized": True, "available_sets": 24, "available_mats": 6}
+    before_zero = dict(ensure_item_stock(zero_state))
+    zero_record = {"booking_id": "same-guest-extension", "status": "awaiting_confirmation"}
+    apply_article_consumption(zero_state, zero_record, expand_items(0), "zero-checked", sets=0)
+    assert zero_record["status"] == "confirmed"
+    assert zero_record["used_sets"] == 0
+    assert zero_record["used_items"] == expand_items(0)
+    assert zero_state["items"] == before_zero
+    assert zero_state["total_consumed_sets"] == 0
+
     # Low stock only proposes the depleted article, not five complete sets.
     art_state["items"]["towel"] = 10
     assert suggested_article_order(art_state)["towel"] == 14

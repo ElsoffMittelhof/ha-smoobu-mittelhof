@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.4 — 2026-11-01
+
+- Provide the Smoobu guest display name (no contact or access details) for the authenticated housekeeping portal via the HA status sensor; names are read live and not persisted in laundry history.
+- Expose `no_laundry_change` for confirmed checkouts whose actual use is 0 sets and 0 individual articles.
+- Add regression coverage confirming a zero-article checkout is marked complete without changing any stock quantities.
+- Node-RED and portal require their corresponding updates for end-to-end behaviour; do not enable the outbound processing flow before reviewing the existing queued Haus 15 job.
+
+
 ## 0.6.3 — 2026-11-01
 
 - Homepage / Uberspace is the primary interface for staff laundry operations. Home Assistant stays the authoritative store for Smoobu-linked bookings, six physical stock items, reorder proposals, deliveries, and inventory counts.
