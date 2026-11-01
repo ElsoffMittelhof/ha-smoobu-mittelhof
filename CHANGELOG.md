@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.6.2 — 2026-11-01
+
+- Mittelhof: Start der tatsächlichen Wäscheerfassung ist als Optionswert **2026-12-01** eingestellt und kann in den Integrationsoptionen verändert werden.
+- Noch offene oder geplante Reinigungen **vor dem Erfassungsbeginn** werden als `excluded_before_start` archiviert, nicht gelöscht. Historische bestätigte Buchungen und bestehende Artikelbestände bleiben unverändert.
+- HA blockiert echte Verbrauchsbuchungen bis zum Startdatum, einschließlich direkter Service-Aufrufe. Bis dahin ist ausschließlich die Simulation erlaubt.
+- Neue lokale Wäschesimulation in der HA-Reinigungskarte: Sets und sechs Einzelartikel, hypothetischer Bestand und Nachbestellvorschlag ohne Dienstaufruf und ohne Speichern.
+- Rein berechnende Funktionen und Regressionstests für den Dezember-Stichtag und die Simulation ergänzt.
+- Das Mitarbeiterportal bietet denselben Trockenlauf ohne Netzwerkaktion und sperrt produktive Verbrauchserfassungen serverseitig bis zum 1. Dezember 2026.
+
+
 ## 0.6.1 — 2026-11-01
 
 - Sicherheitskorrektur: Ohne explizite Buchungs-ID wird ausschließlich eine offene Reinigung bestätigt; bereits bestätigte Verbräuche werden nicht unbemerkt überschrieben.
