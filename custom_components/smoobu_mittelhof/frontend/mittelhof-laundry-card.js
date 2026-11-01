@@ -69,8 +69,7 @@
       const body=el("div",null,"card");root.append(body);
       body.append(el("h2","Mittelhof · Wäschebestand"));
       body.append(el("p","Ein Set = 1 Kopfkissenbezug, 1 Laken, 1 Spannbetttuch, 1 Badetuch, 1 Handtuch. Badvorleger separat.","note"));
-      const start=a.laundry_tracking_start_date||"2026-12-01";
-      const trackingActive=a.laundry_tracking_active===true;
+      const start=a.laundry_tracking_start_date||"2026-11-01";
       const stock=a.laundry_stock_items;
       if(!stock||keys.some(k=>!Number.isInteger(stock[k]))){
         body.append(el("p","Die Einzelartikel fehlen im HA-Status. Bitte Smoobu Workflow v0.6.0 installieren.","note"));return;
@@ -116,70 +115,20 @@
           }catch(e){output.append(el("p",e.message,"sim-error"));}
         });
         box.append(previewButton,output);
-        if(!trackingActive){
-          box.append(el("p","Echte Erfassung erst ab "+start+". Bis dahin nur Simulation.","note"));
-          continue;
-        }
-        const btn=el("button","Verbrauch bestätigen");
-        btn.addEventListener("click",()=>{
-          try{
-            const sets=Number(select.value),items=read(fields);
-            if(!Number.isSafeInteger(sets)||sets<0||sets>8)throw Error("Ungültige Anzahl vollständiger Sets");
-            if(sets===0&&!Object.values(items).some(v=>v>0))throw Error("Kein Wäscheverbrauch eingetragen.");
-            this.execute("record_laundry_consumption",{apartment_id:id,sets,items},
-              "Diesen Verbrauch für "+name+" wirklich abbuchen?");
-          }catch(e){alert(e.message);}
-        });
-        box.append(btn);
+        box.append(el("p","Produktive Wäschepflege ausschließlich im Mittelhof-Mitarbeiterportal.","note"));
       }
-      if(!admin)return;
       body.append(el("hr"));
-      body.append(el("h2","Admin · Bestellungen und Wareneingang"));
+      body.append(el("h2","Portal ist die führende Bedienoberfläche"));
+      body.append(el("p","Home Assistant ist die einzige Datenquelle für Smoobu-Buchungen, Bestände, Nachbestellungen und Liefereingänge. Alle echten Aktionen erfolgen im Mitarbeiterportal.","note"));
+      const link=el("a","Mittelhof-Mitarbeiterportal öffnen");
+      link.href="https://puretraveller.de/intern/";
+      link.target="_blank";link.rel="noopener noreferrer";
+      body.append(link);
       const orders=Array.isArray(a.laundry_stock_pending_orders)?a.laundry_stock_pending_orders:[];
       const deliveries=Array.isArray(a.laundry_stock_pending_deliveries)?a.laundry_stock_pending_deliveries:[];
-      if(!orders.length&&!deliveries.length)body.append(el("p","Keine offene Bestellung oder Lieferung.","note"));
-      for(const order of orders){
-        const panel=el("div",null,"panel");body.append(panel);
-        panel.append(el("h3","Bestellvorschlag"));
-        panel.append(el("p",keys.filter(k=>order.items?.[k]).map(k=>labels[k]+": "+order.items[k]).join(" · ")));
-        const btn=el("button","Bestell-E-Mail freigeben","danger");
-        btn.addEventListener("click",()=>this.execute("laundry_command",{command:"send",request_id:order.id},
-          "Bestellung wirklich per E-Mail versenden? Lager wird erst bei Lieferung erhöht."));
-        panel.append(btn);
-      }
-      for(const delivery of deliveries){
-        const panel=el("div",null,"panel");body.append(panel);
-        panel.append(el("h3","Lieferung: "+String(delivery.id)));
-        panel.append(el("p","Nur wirklich eingetroffene Mengen eingeben.","note"));
-        const fields=el("div",null,"fields");panel.append(fields);
-        keys.forEach(k=>{
-          const remaining=Math.max(0,Number(delivery.items?.[k]||0)-Number(delivery.received_items?.[k]||0));
-          fields.append(numberField(k,remaining,remaining));
-        });
-        const btn=el("button","Wareneingang buchen");
-        btn.addEventListener("click",()=>{
-          try{
-            const items=read(fields);
-            if(!Object.values(items).some(v=>v>0))throw Error("Keine Stücke erhalten.");
-            this.execute("receive_laundry_delivery",{request_id:delivery.id,items},
-              "Diese tatsächlich gelieferten Teile zum verfügbaren Lager addieren?");
-          }catch(e){alert(e.message);}
-        });
-        panel.append(btn);
-      }
-      body.append(el("hr"));
-      const panel=el("div",null,"panel");body.append(panel);
-      panel.append(el("h3","Physische Inventur (nur Admin)"));
-      panel.append(el("p","Die Zählwerte ersetzen die verfügbaren Artikelbestände; die Buchungshistorie bleibt erhalten.","note"));
-      const fields=el("div",null,"fields");panel.append(fields);
-      keys.forEach(k=>fields.append(numberField(k,stock[k],10000)));
-      const btn=el("button","Inventurkorrektur speichern","danger");
-      btn.addEventListener("click",()=>{
-        try{this.execute("reconcile_laundry_items",{items:read(fields)},
-          "Alle sechs Lagerbestände tatsächlich überschreiben? Nicht für Tests verwenden.");}
-        catch(e){alert(e.message);}
-      });
-      panel.append(btn);
+      body.append(el("p","Bestellvorschläge in HA: "+orders.length+
+        " · Offene Lieferungen: "+deliveries.length+
+        " · Offene Wäscheerfassungen: "+Number(a.laundry_consumptions_pending||0),"note"));
     }
     getCardSize(){return 10;}
     static getStubConfig(){return {};}
