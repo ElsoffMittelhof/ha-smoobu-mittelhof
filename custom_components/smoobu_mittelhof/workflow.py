@@ -1434,6 +1434,9 @@ class WorkflowManager:
             notify_domain, notify_name = notify_service.split(".", 1)
             notify_service_available = self.hass.services.has_service(notify_domain, notify_name)
 
+        # The Smoobu guest name is read live for the authenticated service portal.
+        # It is deliberately NOT written into persistent laundry history.
+        live_booking_by_id = _booking_map(self.runtime.coordinator.data or [], self.runtime.houses)
         attrs = {
             "laundry_enabled": bool(self._option(CONF_LAUNDRY_ENABLED, DEFAULT_LAUNDRY_ENABLED)),
             "laundry_order_mode": self._laundry_mode(),
@@ -1467,6 +1470,13 @@ class WorkflowManager:
                     "arrival": str(record.get("arrival") or ""),
                     "departure": str(record.get("departure") or ""),
                     "guest_count": int(record.get("guest_count") or 0),
+                    "guest_name": str((live_booking_by_id.get(str(record.get("booking_id") or booking_id)) or {}).get("guest-name") or "").strip()[:100],
+                    "no_laundry_change": (
+                        record.get("status") == "confirmed"
+                        and int(record.get("used_sets") or 0) == 0
+                        and int(record.get("used_mats") or 0) == 0
+                        and not any(int(value or 0) > 0 for value in (record.get("used_items") or {}).values())
+                    ),
                     "suggested_sets": int(record.get("suggested_sets") or 0),
                     "status": str(record.get("status") or ""),
                     "used_sets": record.get("used_sets"),
