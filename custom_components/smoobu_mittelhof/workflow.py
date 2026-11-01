@@ -787,6 +787,11 @@ class WorkflowManager:
             )
             reconcile_article_inventory(stock, items, _iso_now())
             await self._persist()
+            await self._process_laundry_stock(
+                valid_bookings(self.runtime.coordinator.data or [], self.runtime.houses),
+                force_notify=False,
+            )
+            await self._persist()
 
     async def async_record_clean_laundry_receipt(
         self, receipt_id: str, items: dict[str, int],
