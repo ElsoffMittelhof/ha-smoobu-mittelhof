@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.1 — 2026-11-01
+
+- Sicherheitskorrektur: Ohne explizite Buchungs-ID wird ausschließlich eine offene Reinigung bestätigt; bereits bestätigte Verbräuche werden nicht unbemerkt überschrieben.
+- Gezielte Korrekturen benötigen die Buchungs-ID.
+- Regressionstests für wiederholte Erfassungen und Buchungszuordnung ergänzt.
+
+
 ## 0.6.0 — 2026-10-31
 
 - Six separate article inventories for pillowcases, flat sheets, fitted sheets, bath towels, hand towels, and bath mats, migrated from the existing 24/6 stock without clearing histories.
