@@ -20,6 +20,7 @@ reconcile_article_inventory = module.reconcile_article_inventory
 ITEM_KEYS = module.ITEM_KEYS
 SET_ITEMS = module.SET_ITEMS
 reconcile_physical_stock = module.reconcile_physical_stock
+select_laundry_consumption = module.select_laundry_consumption
 
 
 def run() -> None:
@@ -135,6 +136,25 @@ def run() -> None:
     else:
         raise AssertionError("overconsumption should fail")
     assert art_state["items"] == frozen
+
+    # Regression: no pending departure must NEVER rewrite a previously confirmed record.
+    records = {
+        "old": {"booking_id": "old", "apartment_id": 1046730, "status": "confirmed",
+                "departure": "2026-10-30"},
+        "future": {"booking_id": "future", "apartment_id": 1046730, "status": "scheduled",
+                   "departure": "2026-11-03"},
+        "other": {"booking_id": "other", "apartment_id": 1069726, "status": "awaiting_confirmation",
+                  "departure": "2026-10-31"},
+    }
+    assert select_laundry_consumption(records, 1046730) is None
+    assert select_laundry_consumption(records, 1046730, "old") is records["old"]
+    assert select_laundry_consumption(records, 1046730, "future") is None
+    assert select_laundry_consumption(records, 1046730, "other") is None
+    records["pending_b"] = {"apartment_id": 1046730, "status": "awaiting_confirmation",
+                             "departure": "2026-11-01"}
+    records["pending_a"] = {"apartment_id": 1046730, "status": "awaiting_confirmation",
+                             "departure": "2026-10-31"}
+    assert select_laundry_consumption(records, 1046730) is records["pending_a"]
 
     locked_state = {}
     ensure_stock_state(locked_state, 24, "now", "2026-09-19")
