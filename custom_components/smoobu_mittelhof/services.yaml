@@ -216,7 +216,7 @@ reconcile_laundry_stock:
           mode: box
 
 reconcile_laundry_items:
-  name: Alle Wäscheartikel nach Inventur korrigieren (Admin)
+  name: Alle Wäscheartikel nach Inventur korrigieren
   description: Ersetzt die sechs verfügbaren Artikelbestände nach körperlicher Zählung. Verändert keine historischen Aufträge. Nicht für Tests ausführen.
   fields:
     items:
@@ -226,7 +226,7 @@ reconcile_laundry_items:
         object:
 
 receive_laundry_delivery:
-  name: Wäschereilieferung tatsächlich einbuchen (Admin)
+  name: Wäschereilieferung tatsächlich einbuchen
   description: Bucht ausschließlich bestätigte gelieferte Artikel einer noch offenen Bestellung, auch Teillieferungen. Keine Gutschrift beim E-Mail-Versand.
   fields:
     request_id:
@@ -236,5 +236,20 @@ receive_laundry_delivery:
     items:
       required: true
       description: 'Tatsächlich eingetroffene Einzelmengen, z.B. {towel: 4, bath_mat: 2}.'
+      selector:
+        object:
+
+record_clean_laundry_receipt:
+  name: Zugang sauberer Wäsche verbuchen
+  description: Addiert tatsächlich eingetroffene saubere Artikel ohne Bestellreferenz. Schmutzwäsche zählt nicht als verfügbar. Eine eindeutige Portal-Beleg-ID verhindert doppelte Buchungen.
+  fields:
+    receipt_id:
+      required: true
+      description: 'Idempotente Portal-Beleg-ID, z.B. portal_123.'
+      selector:
+        text:
+    items:
+      required: true
+      description: 'Alle sechs Mengen als Objekt, z.B. {pillowcase: 2, flat_sheet: 2, fitted_sheet: 2, bath_towel: 2, towel: 2, bath_mat: 0}.'
       selector:
         object:

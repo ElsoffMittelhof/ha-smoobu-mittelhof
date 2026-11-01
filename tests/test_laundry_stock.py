@@ -16,6 +16,7 @@ ensure_item_stock = module.ensure_item_stock
 apply_article_consumption = module.apply_article_consumption
 suggested_article_order = module.suggested_article_order
 receive_article_delivery = module.receive_article_delivery
+record_clean_laundry_receipt = module.record_clean_laundry_receipt
 reconcile_article_inventory = module.reconcile_article_inventory
 ITEM_KEYS = module.ITEM_KEYS
 exclude_historical_consumptions = module.exclude_historical_consumptions
@@ -137,6 +138,40 @@ def run() -> None:
     assert art_state["items"]["towel"] == 24
     assert art_state["items"]["bath_mat"] == 6
     assert art_state["reorder_generation"] == previous_generation
+
+    # Additional clean-laundry access does not depend on an open HA order.
+    inbound = {"initialized": True, "available_sets": 24, "available_mats": 6}
+    base = dict(ensure_item_stock(inbound))
+    received_items = {key: 0 for key in ITEM_KEYS}
+    received_items["towel"] = 3
+    received_items["bath_mat"] = 2
+    assert record_clean_laundry_receipt(inbound, "portal_123", received_items, "t1")
+    assert inbound["items"]["towel"] == base["towel"] + 3
+    assert inbound["items"]["bath_mat"] == base["bath_mat"] + 2
+    assert inbound["items"]["pillowcase"] == base["pillowcase"]
+    generation = inbound["reorder_generation"]
+    assert not record_clean_laundry_receipt(inbound, "portal_123", received_items, "t2")
+    assert inbound["items"]["towel"] == base["towel"] + 3
+    assert inbound["reorder_generation"] == generation
+    try:
+        record_clean_laundry_receipt(inbound, "portal_123", expand_items(1), "tamper")
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("same receipt id with different amounts must be rejected")
+    for bad_id, bad_items in [
+        ("not_portal_123", received_items),
+        ("portal_124", {key: 0 for key in ITEM_KEYS}),
+        ("portal_125", {"towel": 2}),
+        ("portal_126", dict(received_items, towel=-1)),
+    ]:
+        try:
+            record_clean_laundry_receipt(inbound, bad_id, bad_items, "invalid")
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"invalid clean receipt accepted: {bad_id}")
+    assert inbound["items"]["towel"] == base["towel"] + 3
 
     # No negative available stock allowed, with atomic rollback.
     art_state["items"]["pillowcase"] = 0

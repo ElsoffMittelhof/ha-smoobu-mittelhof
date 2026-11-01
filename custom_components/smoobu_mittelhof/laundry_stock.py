@@ -205,13 +205,49 @@ def apply_article_consumption(
 
 
 def reconcile_article_inventory(state: dict[str, Any], articles: dict[str, int], now_iso: str) -> None:
-    """Admin physical count; keep order and booking histories untouched."""
+    """Physical clean-stock count; keep order and booking histories untouched."""
     ensure_item_stock(state)
     if set(articles) != set(ITEM_KEYS) or any(type(v) is not int or not 0 <= v <= 10000 for v in articles.values()):
         raise ValueError("All six nonnegative inventory counts are required")
     state["items"] = dict(articles)
     sync_legacy_stock(state)
     state["last_inventory_at"] = now_iso
+
+
+def record_clean_laundry_receipt(
+    state: dict[str, Any], receipt_id: str, articles: dict[str, int], now_iso: str,
+) -> bool:
+    """Atomically add clean returned laundry, even without a linked HA order.
+
+    Receipt IDs ensure the same portal job cannot add twice after an uncertain
+    network acknowledgement. A different quantity for an existing ID is rejected.
+    Dirty laundry returned to the laundry service is NOT clean stock.
+    """
+    if not isinstance(receipt_id, str) or not receipt_id.startswith("portal_") or not receipt_id[7:].isdigit() or len(receipt_id) > 64:
+        raise ValueError("Invalid external receipt ID")
+    if not isinstance(articles, dict) or set(articles) != set(ITEM_KEYS):
+        raise ValueError("All six clean laundry counts are required")
+    if any(type(value) is not int or not 0 <= value <= 100 for value in articles.values()):
+        raise ValueError("Invalid received article quantity")
+    if not any(articles.values()):
+        raise ValueError("At least one clean laundry article must be received")
+
+    receipts = state.setdefault("clean_receipts", {})
+    previous = receipts.get(receipt_id)
+    if previous is not None:
+        if previous.get("items") != articles:
+            raise ValueError("Receipt ID already exists with different quantities")
+        return False
+
+    stock = ensure_item_stock(state)
+    if any(stock[key] + articles[key] > 10000 for key in ITEM_KEYS):
+        raise ValueError("Received clean laundry exceeds the stock limit")
+    state["items"] = {key: stock[key] + articles[key] for key in ITEM_KEYS}
+    sync_legacy_stock(state)
+    state["reorder_generation"] = int(state.get("reorder_generation") or 0) + 1
+    state["last_delivery_at"] = now_iso
+    receipts[receipt_id] = {"items": dict(articles), "received_at": now_iso}
+    return True
 
 
 def suggested_article_order(

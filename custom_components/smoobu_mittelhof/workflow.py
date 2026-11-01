@@ -77,6 +77,7 @@ from .laundry_stock import (
     reconcile_article_inventory,
     suggested_article_order,
     receive_article_delivery,
+    record_clean_laundry_receipt,
     select_laundry_consumption,
     exclude_historical_consumptions,
 )
@@ -785,6 +786,35 @@ class WorkflowManager:
                 self._stock_option(CONF_LAUNDRY_INITIAL_STOCK_MATS, DEFAULT_LAUNDRY_INITIAL_STOCK_MATS),
             )
             reconcile_article_inventory(stock, items, _iso_now())
+            await self._persist()
+            await self._process_laundry_stock(
+                valid_bookings(self.runtime.coordinator.data or [], self.runtime.houses),
+                force_notify=False,
+            )
+            await self._persist()
+
+    async def async_record_clean_laundry_receipt(
+        self, receipt_id: str, items: dict[str, int],
+    ) -> None:
+        """Credit physically received, clean laundry without requiring an HA order."""
+        async with self._lock:
+            if self._laundry_mode() != LAUNDRY_MODE_STOCK_SETS:
+                raise ValueError("Wäschemodus 'Lagerbestand / Sets' ist nicht aktiv")
+            stock = self.runtime.store.laundry_stock
+            ensure_stock_state(
+                stock,
+                self._stock_option(CONF_LAUNDRY_INITIAL_STOCK_SETS, DEFAULT_LAUNDRY_INITIAL_STOCK_SETS),
+                _iso_now(), dt_util.now().date().isoformat(),
+                self._stock_option(CONF_LAUNDRY_INITIAL_STOCK_MATS, DEFAULT_LAUNDRY_INITIAL_STOCK_MATS),
+            )
+            changed = record_clean_laundry_receipt(stock, receipt_id, items, _iso_now())
+            if not changed:
+                return  # Same receipt/job already applied; no duplicate credit.
+            await self._persist()
+            await self._process_laundry_stock(
+                valid_bookings(self.runtime.coordinator.data or [], self.runtime.houses),
+                force_notify=False,
+            )
             await self._persist()
 
     async def async_receive_laundry_items(self, request_id: str, items: dict[str, int]) -> None:
