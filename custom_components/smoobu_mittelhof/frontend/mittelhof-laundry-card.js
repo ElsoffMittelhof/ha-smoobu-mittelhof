@@ -28,6 +28,21 @@
     }
     return items;
   }
+  function simulation(stock,sets,extras){
+    const used={},rest={},reorder={};
+    if(!Number.isSafeInteger(sets)||sets<0||sets>8)throw Error("Sets müssen zwischen 0 und 8 liegen.");
+    if(!stock||keys.some(k=>!Number.isSafeInteger(stock[k])||stock[k]<0))
+      throw Error("Kein vollständiger Artikelbestand verfügbar.");
+    for(const key of keys){
+      used[key]=extras[key]+(key==="bath_mat"?0:sets);
+      rest[key]=stock[key]-used[key];
+      const target=key==="bath_mat"?6:24,threshold=key==="bath_mat"?2:12;
+      reorder[key]=rest[key]<=threshold?Math.max(0,target-rest[key]):0;
+    }
+    if(!Object.values(used).some(v=>v>0))throw Error("Bitte mindestens einen Artikel auswählen.");
+    return {used,rest,reorder,possibleSets:Math.max(0,Math.min(...keys.slice(0,5).map(k=>rest[k]))),
+      valid:keys.every(k=>rest[k]>=0)};
+  }
   class MittelhofLaundryCard extends HTMLElement {
     constructor(){super();this.attachShadow({mode:"open"});this.fingerprint="";}
     setConfig(config){this.config=config||{};}
@@ -49,10 +64,13 @@
       const root=this.shadowRoot;root.replaceChildren();
       const css=el("style");
       css.textContent=":host{display:block}.card{background:var(--card-background-color,#fff);color:var(--primary-text-color);padding:16px;border-radius:12px}.tiles,.houses,.fields{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}.tile,.house,.panel{border:1px solid var(--divider-color,#ddd);border-radius:8px;padding:12px}.tile strong{display:block;font-size:26px}.note{color:var(--secondary-text-color);font-size:13px;line-height:1.5}.quantity{display:grid;gap:4px;font-size:13px}input,select{box-sizing:border-box;width:100%;font:inherit;padding:9px;border:1px solid #a9b5aa;border-radius:6px}.fields{grid-template-columns:repeat(2,minmax(0,1fr))}button{width:100%;margin:12px 0 0;padding:11px;border:0;border-radius:6px;background:var(--primary-color,#245c3c);color:white;cursor:pointer}.panel{margin-top:12px}.danger{background:#8e4934}h2{margin:4px 0 14px;font-size:21px}h3{font-size:16px}hr{border:0;border-top:1px solid var(--divider-color,#ddd);margin:24px 0}@media(max-width:460px){.fields{grid-template-columns:1fr}}";
+      css.textContent += ".sim-output{background:var(--secondary-background-color,#f4f7f5);margin-top:8px;padding:12px;border-radius:8px}.sim-line{font-size:12px;margin:5px 0}.sim-safe{color:#387350;font-weight:bold;font-size:12px}.sim-error{color:#ae3a37;font-weight:bold;font-size:12px}";
       root.append(css);
       const body=el("div",null,"card");root.append(body);
       body.append(el("h2","Mittelhof · Wäschebestand"));
       body.append(el("p","Ein Set = 1 Kopfkissenbezug, 1 Laken, 1 Spannbetttuch, 1 Badetuch, 1 Handtuch. Badvorleger separat.","note"));
+      const start=a.laundry_tracking_start_date||"2026-12-01";
+      const trackingActive=a.laundry_tracking_active===true;
       const stock=a.laundry_stock_items;
       if(!stock||keys.some(k=>!Number.isInteger(stock[k]))){
         body.append(el("p","Die Einzelartikel fehlen im HA-Status. Bitte Smoobu Workflow v0.6.0 installieren.","note"));return;
@@ -76,6 +94,32 @@
         const fields=el("div",null,"fields");
         keys.forEach(k=>fields.append(numberField(k,0)));
         box.append(fields);
+        const previewButton=el("button","SIMULIEREN – nichts buchen");
+        const output=el("div",null,"sim-output");
+        previewButton.addEventListener("click",()=>{
+          output.replaceChildren();
+          try{
+            const sets=Number(select.value),extras=read(fields);
+            const report=simulation(stock,sets,extras);
+            output.append(el("h3","Nur hypothetisch · "+name));
+            for(const key of keys)
+              output.append(el("p",labels[key]+": "+stock[key]+" - "+report.used[key]+" = "+report.rest[key],"sim-line"));
+            output.append(el("p","Danach mögliche vollständige Sets: "+report.possibleSets,"note"));
+            if(!report.valid)output.append(el("p","NICHT möglich: zu wenig saubere Artikel. Keine Bestandsänderung.","sim-error"));
+            else{
+              const proposed=keys.filter(k=>report.reorder[k]>0).map(k=>labels[k]+": "+report.reorder[k]);
+              output.append(el("p",proposed.length?
+                "Unverbindlicher Bestellvorschlag: "+proposed.join(" · "):
+                "Kein Bestellvorschlag nötig.","note"));
+            }
+            output.append(el("p","Simulation vollständig lokal – keine Buchung, keine Bestellung.","sim-safe"));
+          }catch(e){output.append(el("p",e.message,"sim-error"));}
+        });
+        box.append(previewButton,output);
+        if(!trackingActive){
+          box.append(el("p","Echte Erfassung erst ab "+start+". Bis dahin nur Simulation.","note"));
+          continue;
+        }
         const btn=el("button","Verbrauch bestätigen");
         btn.addEventListener("click",()=>{
           try{
