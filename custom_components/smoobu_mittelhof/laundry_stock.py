@@ -276,3 +276,52 @@ def select_laundry_consumption(
         and item.get("status") == "awaiting_confirmation"
     ]
     return min(pending, key=lambda item: str(item.get("departure") or "")) if pending else None
+
+def exclude_historical_consumptions(
+    consumptions: dict[str, dict[str, Any]], start_date: str,
+) -> int:
+    """Archive (do not delete) unchecked checkouts earlier than start_date.
+
+    Confirmed consumptions and future departures are never changed.
+    Idempotent across repeated Smoobu refreshes and restarts.
+    """
+    count = 0
+    for record in consumptions.values():
+        if record.get("status") not in {"scheduled", "awaiting_confirmation"}:
+            continue
+        if str(record.get("departure") or "") >= start_date:
+            continue
+        record["status"] = "excluded_before_start"
+        record["excluded_reason"] = "Tracking starts " + start_date
+        count += 1
+    return count
+
+
+def simulate_article_consumption(
+    available: dict[str, int], sets: int, extras: dict[str, int] | None = None,
+) -> dict[str, Any]:
+    """Strictly pure dry-run; no persistence, notification, order or HA service."""
+    if set(available) != set(ITEM_KEYS) or any(
+        type(v) is not int or v < 0 for v in available.values()
+    ):
+        raise ValueError("Six valid current article balances are required")
+    if type(sets) is not int or sets < 0 or sets > 8:
+        raise ValueError("Sets must be an integer from 0 to 8")
+    consumed = expand_items(sets, 0, extras)
+    if not any(consumed.values()):
+        raise ValueError("Specify at least one laundry item")
+    remaining = {key: available[key] - consumed[key] for key in ITEM_KEYS}
+    shortages = {key: -value for key, value in remaining.items() if value < 0}
+    needs = {
+        key: max(0, ITEM_TARGETS[key] - remaining[key])
+        if remaining[key] <= ITEM_THRESHOLDS[key] else 0
+        for key in ITEM_KEYS
+    }
+    return {
+        "consumed": consumed,
+        "remaining": remaining,
+        "possible_complete_sets": max(0, min(remaining[key] for key in SET_ITEMS)),
+        "shortages": shortages,
+        "would_be_accepted": not shortages,
+        "proposed_order": needs if not shortages else {key: 0 for key in ITEM_KEYS},
+    }
