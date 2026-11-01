@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.5 — 2026-11-01
+
+- Add idempotent service `smoobu_mittelhof.record_clean_laundry_receipt` for physical access of clean linen without a linked purchase order. An identical portal receipt ID can never increase stock twice; a conflicting reuse is rejected.
+- Keep dirty linen separate from available clean inventory. Preserve existing order-linked delivery and physical stocktaking actions.
+- Re-evaluate the existing article-stock notification workflow after receipts; per-item threshold remains 12 for linen articles and 2 for bath mats (targets 24 / 6).
+- Requires updated service portal and Node-RED import for staff inventory/receipts.
+
+
 ## 0.6.4 — 2026-11-01
 
 - Provide the Smoobu guest display name (no contact or access details) for the authenticated housekeeping portal via the HA status sensor; names are read live and not persisted in laundry history.
