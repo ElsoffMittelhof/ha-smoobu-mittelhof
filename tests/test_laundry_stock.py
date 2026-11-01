@@ -18,6 +18,8 @@ suggested_article_order = module.suggested_article_order
 receive_article_delivery = module.receive_article_delivery
 reconcile_article_inventory = module.reconcile_article_inventory
 ITEM_KEYS = module.ITEM_KEYS
+exclude_historical_consumptions = module.exclude_historical_consumptions
+simulate_article_consumption = module.simulate_article_consumption
 SET_ITEMS = module.SET_ITEMS
 reconcile_physical_stock = module.reconcile_physical_stock
 select_laundry_consumption = module.select_laundry_consumption
@@ -155,6 +157,38 @@ def run() -> None:
     records["pending_a"] = {"apartment_id": 1046730, "status": "awaiting_confirmation",
                              "departure": "2026-10-31"}
     assert select_laundry_consumption(records, 1046730) is records["pending_a"]
+
+    # Start 01.12.2026: old unconfirmed tasks disappear, no history is deleted.
+    historic = {
+        "a": {"status": "awaiting_confirmation", "departure": "2026-10-31"},
+        "b": {"status": "scheduled", "departure": "2026-11-30"},
+        "c": {"status": "awaiting_confirmation", "departure": "2026-12-01"},
+        "d": {"status": "confirmed", "departure": "2026-10-01"},
+        "e": {"status": "cancelled", "departure": "2026-11-12"},
+    }
+    assert exclude_historical_consumptions(historic, "2026-12-01") == 2
+    assert historic["a"]["status"] == "excluded_before_start"
+    assert historic["b"]["status"] == "excluded_before_start"
+    assert historic["c"]["status"] == "awaiting_confirmation"
+    assert historic["d"]["status"] == "confirmed"
+    assert exclude_historical_consumptions(historic, "2026-12-01") == 0
+
+    # Pure read-only preview: 2 sets + 1 towel + 1 bath mat, never mutate the snapshot.
+    existing = {k: 24 if k in SET_ITEMS else 6 for k in ITEM_KEYS}
+    unchanged = dict(existing)
+    preview = simulate_article_consumption(existing, 2, {"towel": 1, "bath_mat": 1})
+    assert preview["consumed"]["towel"] == 3
+    assert preview["remaining"]["towel"] == 21
+    assert preview["remaining"]["pillowcase"] == 22
+    assert preview["remaining"]["bath_mat"] == 5
+    assert preview["possible_complete_sets"] == 21
+    assert preview["would_be_accepted"]
+    assert not any(preview["proposed_order"].values())
+    assert existing == unchanged
+    rejected = simulate_article_consumption(existing, 0, {"bath_mat": 7})
+    assert not rejected["would_be_accepted"]
+    assert rejected["shortages"]["bath_mat"] == 1
+    assert existing == unchanged
 
     locked_state = {}
     ensure_stock_state(locked_state, 24, "now", "2026-09-19")
