@@ -1459,6 +1459,30 @@ class WorkflowManager:
                 self._stock_option(CONF_LAUNDRY_INITIAL_STOCK_MATS, DEFAULT_LAUNDRY_INITIAL_STOCK_MATS),
             )),
             "laundry_stock_item_labels": ITEM_LABELS,
+            "laundry_portal_bookings": [
+                {
+                    "booking_id": str(record.get("booking_id") or booking_id),
+                    "apartment_id": int(record.get("apartment_id") or 0),
+                    "house": str(record.get("house") or ""),
+                    "arrival": str(record.get("arrival") or ""),
+                    "departure": str(record.get("departure") or ""),
+                    "guest_count": int(record.get("guest_count") or 0),
+                    "suggested_sets": int(record.get("suggested_sets") or 0),
+                    "status": str(record.get("status") or ""),
+                    "used_sets": record.get("used_sets"),
+                }
+                for booking_id, record in sorted(
+                    self.runtime.store.laundry_consumptions.items(),
+                    key=lambda pair: (
+                        0 if pair[1].get("status") == "awaiting_confirmation" else 1,
+                        str(pair[1].get("departure") or ""),
+                        str(pair[0]),
+                    ),
+                )
+                if record.get("status") in {"awaiting_confirmation", "scheduled", "confirmed"}
+                and str(record.get("departure") or "") >= self._laundry_effective_start().isoformat()
+                and record.get("apartment_id") in self.runtime.houses
+            ][:40],
             "laundry_stock_pending_orders": [
                 {"id": r.get("id"), "items": r.get("items"), "status": r.get("status")}
                 for r in self.runtime.store.laundry_requests.values()
