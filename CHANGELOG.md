@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.6.3 — 2026-11-01
+
+- Homepage / Uberspace is the primary interface for staff laundry operations. Home Assistant stays the authoritative store for Smoobu-linked bookings, six physical stock items, reorder proposals, deliveries, and inventory counts.
+- Restores current Smoobu checkouts from November 1, 2026, instead of the previous December-only pilot gate. Migrates the previously stored December cutoff to the active November setting. Older checkouts before the configured date remain archived, not deleted; currently valid bookings are reactivated.
+- Adds sanitized `laundry_portal_bookings` sensor attribute with booking ID, house, arrival/departure, guest count and workflow state. Guest names and contact details are never sent to the staff portal.
+- HA laundry card becomes read-only dashboard plus local simulation; actual work is performed using the authenticated portal and an outbound-only Node-RED agent.
+- Adds privacy-preserving status sync, booking-specific consumption and administrator inventory commands on the homepage.
+
+
 ## 0.6.2 — 2026-11-01
 
 - Mittelhof: Start der tatsächlichen Wäscheerfassung ist als Optionswert **2026-12-01** eingestellt und kann in den Integrationsoptionen verändert werden.
