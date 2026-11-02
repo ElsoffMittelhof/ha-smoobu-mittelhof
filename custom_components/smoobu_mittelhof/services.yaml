@@ -253,3 +253,23 @@ record_clean_laundry_receipt:
       description: 'Alle sechs Mengen als Objekt, z.B. {pillowcase: 2, flat_sheet: 2, fitted_sheet: 2, bath_towel: 2, towel: 2, bath_mat: 0}.'
       selector:
         object:
+
+sync_portal_laundry_stock:
+  name: Portal-Wäschebestand als Replikat synchronisieren
+  description: Setzt den HA-Anzeigebestand aus der führenden Portal-Datenbank anhand monotoner Revisionen. Buchungs- und Lieferereignisse markieren nur den Workflowstatus, der Bestand wird nicht erneut verändert.
+  fields:
+    revision:
+      required: true
+      selector:
+        number:
+          min: 1
+          mode: box
+    items:
+      required: true
+      selector:
+        object:
+    events:
+      required: true
+      description: Bestätigte Portal-Buchungs- und Lieferereignisse seit dem letzten bestätigten Cursor.
+      selector:
+        object:
