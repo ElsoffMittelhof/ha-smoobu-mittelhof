@@ -2,7 +2,7 @@
 
 Custom Home Assistant integration for Smoobu reservations, booking calendars, laundry approval workflows, NUKI guest-code emails, and optional IT.NRW monthly statistics.
 
-Current public version: **0.6.7**.
+Current public version: **0.6.8**.
 
 > Technical note: the integration domain remains `smoobu_mittelhof` for compatibility with installations from the private pre-release phase. The public integration contains no property-specific apartment IDs, email addresses, Home Assistant entity IDs, API credentials, or SMTP credentials.
 
@@ -249,3 +249,8 @@ The former `node_red_compatible` period remains available as an explicit legacy 
 ## License
 
 MIT
+
+
+### Separate manual checks from v0.6.8
+
+For NUKI-only checks call `smoobu_mittelhof.process_nuki_only` with `force_notify: true` if needed. For laundry-only restock alert checks use `smoobu_mittelhof.process_laundry_only` with `force_notify: true`. Both preserve stock authority in the staff portal and never send a supplier order without the existing approval action. The old combined service remains for compatibility with existing automations, but is intentionally not exposed on the dashboards.
