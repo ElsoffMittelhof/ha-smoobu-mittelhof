@@ -2,7 +2,7 @@
 
 Custom Home Assistant integration for Smoobu reservations, booking calendars, laundry approval workflows, NUKI guest-code emails, and optional IT.NRW monthly statistics.
 
-Current public version: **0.6.0**.
+Current public version: **0.6.7**.
 
 > Technical note: the integration domain remains `smoobu_mittelhof` for compatibility with installations from the private pre-release phase. The public integration contains no property-specific apartment IDs, email addresses, Home Assistant entity IDs, API credentials, or SMTP credentials.
 
@@ -86,7 +86,7 @@ Suggested use:
 3+ guests = 4 sets
 ```
 
-A complete set for Mittelhof consists of **one pillowcase, one flat sheet (Laken), one fitted sheet (Spannbetttuch), one bath towel and one regular hand towel**. **Bath mats are counted independently** and are not included in the set.
+A complete set for Mittelhof consists of **one pillowcase, one flat sheet (Laken), one fitted sheet (Bettdeckenbezug), one bath towel and one regular hand towel**. **Bath mats are counted independently** and are not included in the set.
 
 The cleaner records actual use with the Home Assistant action:
 
@@ -100,9 +100,16 @@ For stock mode, add an explicit mapping to the local `laundry.yaml` where possib
 
 ```yaml
 stock_order:
+  item_products:
+    pillowcase: pillowcase
+    flat_sheet: sheet
+    duvet_cover: duvet_cover
+    bath_towel: bath_towel
+    towel: towel
+    bath_mat: bath_mat
   set_products:
-    flat_sheet: 1
-    fitted_sheet: 1
+    sheet: 1
+    duvet_cover: 1
     pillowcase: 1
     towel: 1
     bath_towel: 1
@@ -122,7 +129,7 @@ data:
 
 **New consumption input**: the existing action accepts an additional `mats` field (0–6, default 0), separately from `sets`. The existing booking correction rules remain in force; entering a correction must include the intended complete mat count, otherwise the default 0 is used. Orders still follow the previously configured set threshold and add the separately configured bath mat quantity. The integration currently considers an emailed reorder as already replenished, as in v0.4.1; verify actual deliveries manually.
 
-**Important for existing local laundry.yaml:** the actual `/config/smoobu_workflow/laundry.yaml` (or existing legacy configuration folder) is *not* updated automatically by HACS. Adjust `stock_order.set_products` to match your local product keys for Laken and Spannbetttuch, and verify the actual laundry prices. If the old config contains `duvet_cover`, do not silently substitute that product for `flat_sheet`; add/correct the local product catalog explicitly.
+**Important for existing local laundry.yaml:** the actual `/config/smoobu_workflow/laundry.yaml` (or existing legacy configuration folder) is *not* updated automatically by HACS. Adjust `stock_order.set_products` to match your local product keys for Laken and Bettdeckenbezug, and verify the actual laundry prices. For Benfer quote 168, `duvet_cover` maps to the supplier product `Systemwäsche Bezug`, while stock article `flat_sheet` maps to supplier product `sheet` (`Systemwäsche Laken`). Do not conflate these two.
 
 
 The public integration also includes a backwards-compatible name-based product inference for common German and English product names.
@@ -130,7 +137,7 @@ The public integration also includes a backwards-compatible name-based product i
 
 ## v0.6.0 – individual articles, set shortcut and confirmed deliveries
 
-The six independent item keys are `pillowcase`, `flat_sheet`, `fitted_sheet`,
+The six independent item keys are `pillowcase`, `flat_sheet`, `duvet_cover`,
 `bath_towel`, `towel` and `bath_mat`. The first five form one complete set; the
 bath mat is not included in sets. Existing users who have 24 complete sets and
 6 bath mats will migrate without losing previous transactions.
@@ -199,7 +206,7 @@ data:
   items:
     pillowcase: 24
     flat_sheet: 24
-    fitted_sheet: 24
+    duvet_cover: 24
     bath_towel: 24
     towel: 24
     bath_mat: 6
@@ -212,7 +219,7 @@ the read-only Node-RED connection test.
 The actual local `laundry.yaml` file is **never overwritten by HACS**. Before
 sending any supplier order, ensure `stock_order.item_products` maps all six
 keys to six **different real supplier products**, including distinct Laken
-and Spannbetttuch. Confirm the original unit prices and supplier contact
+and Bettdeckenbezug. Confirm the original unit prices and supplier contact
 details.
 
 ## Timeline card
