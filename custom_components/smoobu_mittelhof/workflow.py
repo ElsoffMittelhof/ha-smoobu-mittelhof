@@ -75,6 +75,7 @@ from .laundry_stock import (
     ensure_item_stock,
     sync_legacy_stock,
     apply_portal_stock_mirror,
+    migrate_legacy_item_keys,
     apply_article_consumption,
     reconcile_article_inventory,
     suggested_article_order,
@@ -528,6 +529,22 @@ class WorkflowManager:
             },
         )
 
+    def _migrate_legacy_laundry_articles(self) -> None:
+        """Migrate persisted v0.6.6 product IDs, never book physical stock."""
+        stock=self.runtime.store.laundry_stock
+        if isinstance(stock.get("items"),dict):
+            migrate_legacy_item_keys(stock["items"])
+        for receipt in (stock.get("clean_receipts") or {}).values():
+            if isinstance(receipt,dict) and isinstance(receipt.get("items"),dict):
+                migrate_legacy_item_keys(receipt["items"])
+        for request in self.runtime.store.laundry_requests.values():
+            for field in ("items","received_items"):
+                if isinstance(request.get(field),dict):
+                    migrate_legacy_item_keys(request[field])
+        for record in self.runtime.store.laundry_consumptions.values():
+            if isinstance(record.get("used_items"),dict):
+                migrate_legacy_item_keys(record["used_items"])
+
     def _require_ha_stock_writable(self) -> None:
         if self.runtime.store.laundry_stock.get("authority") == "portal":
             raise ValueError("Portal führt den Wäschebestand; in HA nur das Portal-Replikat aktualisieren")
@@ -567,6 +584,7 @@ class WorkflowManager:
         now = dt_util.now()
         current = _booking_map(bookings, self.runtime.houses)
         consumptions = self.runtime.store.laundry_consumptions
+        self._migrate_legacy_laundry_articles()
         stock = self.runtime.store.laundry_stock
         requests = self.runtime.store.laundry_requests
 
@@ -725,6 +743,7 @@ class WorkflowManager:
     ) -> None:
         """Mirror Uberspace's sole stock ledger. Never deduct/add the same stock in HA."""
         async with self._lock:
+            self._migrate_legacy_laundry_articles()
             if self._laundry_mode() != LAUNDRY_MODE_STOCK_SETS:
                 raise ValueError("Lagerbestand / Sets ist nicht aktiv")
             if type(revision) is not int or revision<1:
