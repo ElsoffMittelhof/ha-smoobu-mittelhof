@@ -25,6 +25,8 @@ from .const import (
     SERVICE_NUKI_COMMAND,
     SERVICE_PREVIEW_TEMPLATE,
     SERVICE_PROCESS_WORKFLOWS,
+    SERVICE_PROCESS_NUKI_ONLY,
+    SERVICE_PROCESS_LAUNDRY_ONLY,
     SERVICE_RELOAD_FILES,
     SERVICE_RESET_LAUNDRY,
     SERVICE_RESET_NUKI,
@@ -129,6 +131,18 @@ async def async_register_services(hass: HomeAssistant) -> None:
         await runtime.workflow.async_process(
             force_laundry_notify=bool(call.data.get("force_laundry_notify", False)),
             force_nuki_notify=bool(call.data.get("force_nuki_notify", False)),
+        )
+
+    async def process_nuki_only(call: ServiceCall) -> None:
+        runtime = _runtime(hass)
+        await runtime.workflow.async_process_nuki_only(
+            force_notify=bool(call.data.get("force_notify", False))
+        )
+
+    async def process_laundry_only(call: ServiceCall) -> None:
+        runtime = _runtime(hass)
+        await runtime.workflow.async_process_laundry_only(
+            force_notify=bool(call.data.get("force_notify", False))
         )
 
     async def laundry_command(call: ServiceCall) -> None:
@@ -265,6 +279,14 @@ async def async_register_services(hass: HomeAssistant) -> None:
             vol.Optional("force_laundry_notify", default=False): bool,
             vol.Optional("force_nuki_notify", default=False): bool,
         }),
+    )
+    hass.services.async_register(
+        DOMAIN, SERVICE_PROCESS_NUKI_ONLY, process_nuki_only,
+        schema=vol.Schema({vol.Optional("force_notify", default=False): bool}),
+    )
+    hass.services.async_register(
+        DOMAIN, SERVICE_PROCESS_LAUNDRY_ONLY, process_laundry_only,
+        schema=vol.Schema({vol.Optional("force_notify", default=False): bool}),
     )
     hass.services.async_register(
         DOMAIN,
