@@ -250,6 +250,31 @@ def record_clean_laundry_receipt(
     return True
 
 
+def apply_portal_stock_mirror(
+    state: dict[str, Any], revision: int, articles: dict[str, int], now_iso: str,
+) -> bool:
+    """Monotonic exact snapshot from the portal, never an additive receipt."""
+    if type(revision) is not int or revision < 1:
+        raise ValueError("Invalid portal revision")
+    if not isinstance(articles, dict) or set(articles) != set(ITEM_KEYS):
+        raise ValueError("All six portal articles required")
+    if any(type(v) is not int or not 0 <= v <= 100000 for v in articles.values()):
+        raise ValueError("Invalid portal article count")
+    current=int(state.get("portal_revision") or 0)
+    if revision<current:
+        raise ValueError("Stale portal revision")
+    if revision==current and state.get("authority")=="portal":
+        if dict(state.get("items") or {})!=articles:
+            raise ValueError("Conflicting portal revision")
+        return False
+    state["items"]=dict(articles)
+    state["authority"]="portal"
+    state["portal_revision"]=revision
+    state["last_portal_sync_at"]=now_iso
+    sync_legacy_stock(state)
+    return True
+
+
 def suggested_article_order(
     state: dict[str, Any], on_order: dict[str, int] | None = None,
 ) -> dict[str, int]:

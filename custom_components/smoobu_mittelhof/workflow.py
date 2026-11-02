@@ -73,6 +73,8 @@ from .laundry_stock import (
     SET_ITEMS,
     expand_items,
     ensure_item_stock,
+    sync_legacy_stock,
+    apply_portal_stock_mirror,
     apply_article_consumption,
     reconcile_article_inventory,
     suggested_article_order,
@@ -526,6 +528,10 @@ class WorkflowManager:
             },
         )
 
+    def _require_ha_stock_writable(self) -> None:
+        if self.runtime.store.laundry_stock.get("authority") == "portal":
+            raise ValueError("Portal führt den Wäschebestand; in HA nur das Portal-Replikat aktualisieren")
+
     def _laundry_mode(self) -> str:
         return str(self._option(CONF_LAUNDRY_ORDER_MODE, DEFAULT_LAUNDRY_ORDER_MODE) or DEFAULT_LAUNDRY_ORDER_MODE)
 
@@ -714,6 +720,90 @@ class WorkflowManager:
         )
 
 
+    async def async_sync_portal_laundry_stock(
+        self, revision: int, items: dict[str, int], events: list[dict[str, Any]],
+    ) -> None:
+        """Mirror Uberspace's sole stock ledger. Never deduct/add the same stock in HA."""
+        async with self._lock:
+            if self._laundry_mode() != LAUNDRY_MODE_STOCK_SETS:
+                raise ValueError("Lagerbestand / Sets ist nicht aktiv")
+            if type(revision) is not int or revision<1:
+                raise ValueError("Ungültige Portalrevision")
+            if set(items)!=set(ITEM_KEYS) or any(type(v) is not int or not 0<=v<=100000 for v in items.values()):
+                raise ValueError("Sechs gültige Portalbestände erforderlich")
+            if not isinstance(events,list) or len(events)>100:
+                raise ValueError("Ungültiger Ereignisbatch")
+            stock=self.runtime.store.laundry_stock
+            current=int(stock.get("portal_revision") or 0)
+            if revision<current:
+                raise ValueError("Veraltete Portalrevision")
+            if revision==current and stock.get("authority")=="portal" and dict(stock.get("items") or {})!=items:
+                raise ValueError("Widersprüchliche Portalrevision")
+
+            # Validate and stage all changes before applying. HA's stock is
+            # a replica; events only reconcile checkout/order status.
+            consumptions=deepcopy(self.runtime.store.laundry_consumptions)
+            requests=deepcopy(self.runtime.store.laundry_requests)
+            next_cursor=int(stock.get("portal_event_cursor") or 0)
+            for event in events:
+                eid=event.get("id")
+                if type(eid) is not int or eid<1:
+                    raise ValueError("Ungültige Portalereignis-ID")
+                if eid<=next_cursor:
+                    continue  # Idempotent replay of an acknowledged event.
+                kind=event.get("kind")
+                values=event.get("items")
+                if not isinstance(values,dict) or set(values)!=set(ITEM_KEYS) or any(
+                    type(v) is not int or not 0<=v<=1000 for v in values.values()
+                ):
+                    raise ValueError("Ungültige Portalereignis-Mengen")
+                if kind=="consumption":
+                    booking_id=str(event.get("booking_id") or "")
+                    house=str(event.get("house") or "")
+                    sets=event.get("sets")
+                    record=consumptions.get(booking_id)
+                    if not record or str(record.get("house") or "")!=house or type(sets) is not int or not 0<=sets<=8:
+                        raise ValueError("Unbekannte Portal-Reinigung: "+booking_id)
+                    if record.get("status") not in {"awaiting_confirmation","confirmed"}:
+                        raise ValueError("Buchung kann nicht abgeschlossen werden: "+booking_id)
+                    record.update(status="confirmed",used_sets=sets,
+                        used_mats=values["bath_mat"],used_items=dict(values),
+                        confirmed_at=_iso_now(),portal_job_id=eid)
+                elif kind=="delivery":
+                    request_id=str(event.get("request_id") or "")
+                    request=requests.get(request_id)
+                    if not request or request.get("inventory_mode")!="items_v1" or request.get("status") not in {
+                        "sent","partial_received","received"
+                    }:
+                        raise ValueError("Keine passende HA-Bestellung: "+request_id)
+                    old=request.get("received_items") or {}
+                    received={k:int(old.get(k,0))+values[k] for k in ITEM_KEYS}
+                    if any(received[k]>int((request.get("items") or {}).get(k,0)) for k in ITEM_KEYS):
+                        raise ValueError("Lieferung größer als Bestellung: "+request_id)
+                    completed=all(received[k]==int((request.get("items") or {}).get(k,0)) for k in ITEM_KEYS)
+                    request.update(received_items=received,status="received" if completed else "partial_received",
+                        received_at=_iso_now() if completed else None,last_received_at=_iso_now())
+                else:
+                    raise ValueError("Unbekanntes Portalereignis")
+                next_cursor=eid
+
+            ensure_stock_state(stock,
+                self._stock_option(CONF_LAUNDRY_INITIAL_STOCK_SETS, DEFAULT_LAUNDRY_INITIAL_STOCK_SETS),
+                _iso_now(), dt_util.now().date().isoformat(),
+                self._stock_option(CONF_LAUNDRY_INITIAL_STOCK_MATS, DEFAULT_LAUNDRY_INITIAL_STOCK_MATS))
+            apply_portal_stock_mirror(stock,revision,items,_iso_now())
+            stock["portal_event_cursor"]=next_cursor
+            self.runtime.store.laundry_consumptions.clear()
+            self.runtime.store.laundry_consumptions.update(consumptions)
+            self.runtime.store.laundry_requests.clear()
+            self.runtime.store.laundry_requests.update(requests)
+            await self._persist()
+            await self._process_laundry_stock(
+                valid_bookings(self.runtime.coordinator.data or [], self.runtime.houses),
+                force_notify=False,
+            )
+            await self._persist()
+
     async def async_record_laundry_consumption(
         self,
         apartment_id: int,
@@ -724,6 +814,7 @@ class WorkflowManager:
     ) -> None:
         """Record the cleaner-confirmed number of complete sets used for a checkout."""
         async with self._lock:
+            self._require_ha_stock_writable()
             if self._laundry_mode() != LAUNDRY_MODE_STOCK_SETS:
                 raise ValueError("Wäschemodus 'Lagerbestand / Sets' ist nicht aktiv")
 
@@ -762,6 +853,7 @@ class WorkflowManager:
     async def async_reconcile_laundry_stock(self, sets: int, mats: int) -> None:
         """Explicit manual stocktake; do not alter existing laundry order history."""
         async with self._lock:
+            self._require_ha_stock_writable()
             if self._laundry_mode() != LAUNDRY_MODE_STOCK_SETS:
                 raise ValueError("Wäschemodus 'Lagerbestand / Sets' ist nicht aktiv")
             stock = self.runtime.store.laundry_stock
@@ -777,6 +869,7 @@ class WorkflowManager:
     async def async_reconcile_laundry_items(self, items: dict[str, int]) -> None:
         """Administrator-entered physical count for every article."""
         async with self._lock:
+            self._require_ha_stock_writable()
             if self._laundry_mode() != LAUNDRY_MODE_STOCK_SETS:
                 raise ValueError("Wäschemodus 'Lagerbestand / Sets' ist nicht aktiv")
             stock = self.runtime.store.laundry_stock
@@ -798,6 +891,7 @@ class WorkflowManager:
     ) -> None:
         """Credit physically received, clean laundry without requiring an HA order."""
         async with self._lock:
+            self._require_ha_stock_writable()
             if self._laundry_mode() != LAUNDRY_MODE_STOCK_SETS:
                 raise ValueError("Wäschemodus 'Lagerbestand / Sets' ist nicht aktiv")
             stock = self.runtime.store.laundry_stock
@@ -820,6 +914,7 @@ class WorkflowManager:
     async def async_receive_laundry_items(self, request_id: str, items: dict[str, int]) -> None:
         """Add ONLY received goods to physical stock, with strict order-ID checks."""
         async with self._lock:
+            self._require_ha_stock_writable()
             request = self.runtime.store.laundry_requests.get(request_id)
             if not request or request.get("inventory_mode") != "items_v1" or request.get("status") not in {"sent", "partial_received"}:
                 raise ValueError("Keine offene lieferbare Artikelbestellung mit dieser ID vorhanden")
@@ -1486,6 +1581,9 @@ class WorkflowManager:
             "laundry_stock_available_mats": self.runtime.store.laundry_stock.get("available_mats"),
             "laundry_tracking_start_date": self._laundry_effective_start().isoformat(),
             "laundry_tracking_active": True,
+            "laundry_stock_authority": self.runtime.store.laundry_stock.get("authority","ha"),
+            "laundry_portal_revision": self.runtime.store.laundry_stock.get("portal_revision"),
+            "laundry_portal_event_cursor": self.runtime.store.laundry_stock.get("portal_event_cursor"),
             "laundry_stock_items": dict(ensure_item_stock(
                 self.runtime.store.laundry_stock,
                 self._stock_option(CONF_LAUNDRY_INITIAL_STOCK_SETS, DEFAULT_LAUNDRY_INITIAL_STOCK_SETS),

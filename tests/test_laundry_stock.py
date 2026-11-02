@@ -14,6 +14,7 @@ suggested_sets = module.suggested_sets
 expand_items = module.expand_items
 ensure_item_stock = module.ensure_item_stock
 apply_article_consumption = module.apply_article_consumption
+apply_portal_stock_mirror = module.apply_portal_stock_mirror
 suggested_article_order = module.suggested_article_order
 receive_article_delivery = module.receive_article_delivery
 record_clean_laundry_receipt = module.record_clean_laundry_receipt
@@ -172,6 +173,26 @@ def run() -> None:
         else:
             raise AssertionError(f"invalid clean receipt accepted: {bad_id}")
     assert inbound["items"]["towel"] == base["towel"] + 3
+
+    portal = {"initialized": True, "available_sets": 24, "available_mats": 6}
+    ensure_item_stock(portal)
+    baseline = dict(portal["items"])
+    mirror = dict(baseline, towel=19)
+    assert apply_portal_stock_mirror(portal, 5, mirror, "now")
+    assert portal["items"]["towel"] == 19
+    assert portal["available_sets"] == 19
+    assert not apply_portal_stock_mirror(portal, 5, mirror, "retry")
+    assert portal["items"]["towel"] == 19  # Never subtract twice
+    for bad_revision, bad_items in [(4, mirror), (5, dict(mirror, towel=18))]:
+        try:
+            apply_portal_stock_mirror(portal, bad_revision, bad_items, "stale")
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("Old/conflicting portal version accepted")
+    assert apply_portal_stock_mirror(portal, 6, dict(mirror, towel=22), "reconcile")
+    assert portal["items"]["towel"] == 22  # Absolute value, not +3
+    assert portal["authority"] == "portal"
 
     # No negative available stock allowed, with atomic rollback.
     art_state["items"]["pillowcase"] = 0
