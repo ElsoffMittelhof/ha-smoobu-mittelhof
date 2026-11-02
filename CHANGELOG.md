@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.7 — 2026-11-02
+
+- Correct Mittelhof's fifth linen-set article ID: `duvet_cover` (Bettdeckenbezug) replaces the incorrectly assumed `fitted_sheet` (Spannbetttuch); keep `flat_sheet` as Laken.
+- One-time, non-destructive migration preserves all six physical counts, monotonic portal revision and HA replication cursor. Existing HA open-order, received-delivery and checkout item records are migrated without additional inventory mutations.
+- Recognize Benfer's supplier position `Systemwäsche Bezug` as duvet cover and `Systemwäsche Laken` as the distinct sheet in item-based reorder calculations.
+- Requires the coordinated portal deployment, updated Node-RED bidirectional sync and corrected **local** `/config/smoobu_mittelhof/laundry.yaml`. HACS cannot modify this user-managed file.
+
+
 ## 0.6.6 — 2026-11-02
 
 - Uberspace staff portal is the single source of truth for the six available clean-laundry items; HA receives an exact, monotonic versioned snapshot with `smoobu_mittelhof.sync_portal_laundry_stock`.
