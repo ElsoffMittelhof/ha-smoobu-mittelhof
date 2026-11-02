@@ -124,18 +124,33 @@ def reconcile_physical_stock(state: dict[str, Any], sets: int, mats: int, now_is
     state["last_inventory_at"] = now_iso
 
 # v0.6: canonical inventory is held per individual laundry article.
-SET_ITEMS = ("pillowcase", "flat_sheet", "fitted_sheet", "bath_towel", "towel")
+SET_ITEMS = ("pillowcase", "flat_sheet", "duvet_cover", "bath_towel", "towel")
 ITEM_KEYS = SET_ITEMS + ("bath_mat",)
 ITEM_LABELS = {
     "pillowcase": "Kopfkissenbezug",
     "flat_sheet": "Laken",
-    "fitted_sheet": "Spannbetttuch",
+    "duvet_cover": "Bettdeckenbezug",
     "bath_towel": "Badetuch",
     "towel": "Handtuch",
     "bath_mat": "Badvorleger",
 }
 ITEM_TARGETS = {**{item: 24 for item in SET_ITEMS}, "bath_mat": 6}
 ITEM_THRESHOLDS = {**{item: 12 for item in SET_ITEMS}, "bath_mat": 2}
+
+
+def migrate_legacy_item_keys(items: dict[str, Any]) -> bool:
+    """Rename only the legacy inventory ID; preserve the actual piece count."""
+    if not isinstance(items, dict):
+        raise ValueError("Invalid stored stock item map")
+    if "fitted_sheet" not in items:
+        return False
+    if "duvet_cover" in items:
+        raise ValueError("Ambiguous duvet cover migration: old and new IDs coexist")
+    new={key:items["fitted_sheet"] if key=="duvet_cover" else items[key]
+         for key in ITEM_KEYS if key=="duvet_cover" or key in items}
+    items.clear()
+    items.update(new)
+    return True
 
 
 def expand_items(sets: int = 0, mats: int = 0, extras: dict[str, Any] | None = None) -> dict[str, int]:
@@ -160,6 +175,7 @@ def ensure_item_stock(state: dict[str, Any], initial_sets: int = 24, initial_mat
         mats = int(state.get("available_mats") if state.get("available_mats") is not None else initial_mats)
         state["items"] = expand_items(sets, mats)
         state.setdefault("items_migrated_from_sets", True)
+    migrate_legacy_item_keys(state["items"])
     for key in ITEM_KEYS:
         state["items"].setdefault(key, 0)
     sync_legacy_stock(state)

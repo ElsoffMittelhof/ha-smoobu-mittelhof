@@ -20,6 +20,7 @@ receive_article_delivery = module.receive_article_delivery
 record_clean_laundry_receipt = module.record_clean_laundry_receipt
 reconcile_article_inventory = module.reconcile_article_inventory
 ITEM_KEYS = module.ITEM_KEYS
+migrate_legacy_item_keys = module.migrate_legacy_item_keys
 exclude_historical_consumptions = module.exclude_historical_consumptions
 simulate_article_consumption = module.simulate_article_consumption
 SET_ITEMS = module.SET_ITEMS
@@ -80,19 +81,38 @@ def run() -> None:
     assert legacy["available_mats"] == 6
 
 
+    # Persisted v0.6.6 fitted_sheet was confirmed to represent a duvet cover.
+    old_map={"pillowcase":24,"flat_sheet":24,"fitted_sheet":24,
+             "bath_towel":24,"towel":24,"bath_mat":6}
+    assert migrate_legacy_item_keys(old_map)
+    assert old_map["duvet_cover"]==24 and "fitted_sheet" not in old_map
+    assert not migrate_legacy_item_keys(old_map)
+    try:
+        migrate_legacy_item_keys(dict(old_map,fitted_sheet=99))
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("Conflicting legacy and new keys must be rejected")
+    persisted={"initialized":True,"items":{"pillowcase":23,"flat_sheet":22,
+               "fitted_sheet":17,"bath_towel":21,"towel":20,"bath_mat":5}}
+    migrated=ensure_item_stock(persisted)
+    assert migrated["duvet_cover"]==17
+    assert persisted["available_sets"]==17
+    assert "fitted_sheet" not in migrated
+
     # v0.6 article-by-article accounting, migration preserves 24/6.
     art_state = {"initialized": True, "available_sets": 24, "available_mats": 6}
     items = ensure_item_stock(art_state)
     assert [items[k] for k in SET_ITEMS] == [24]*5
     assert items["bath_mat"] == 6
     assert expand_items(2, 1, {"towel": 2, "pillowcase": 1}) == {
-        "pillowcase": 3, "flat_sheet": 2, "fitted_sheet": 2,
+        "pillowcase": 3, "flat_sheet": 2, "duvet_cover": 2,
         "bath_towel": 2, "towel": 4, "bath_mat": 1
     }
     rec = {}
     apply_article_consumption(art_state, rec, expand_items(2, 1, {"towel": 2}), "t1", sets=2)
     assert art_state["items"]["towel"] == 20
-    assert art_state["items"]["fitted_sheet"] == 22
+    assert art_state["items"]["duvet_cover"] == 22
     assert art_state["items"]["bath_mat"] == 5
     assert art_state["available_sets"] == 20  # complete sets are limited by hand towels
     assert art_state["available_mats"] == 5

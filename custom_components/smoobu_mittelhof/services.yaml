@@ -221,7 +221,7 @@ reconcile_laundry_items:
   fields:
     items:
       required: true
-      description: 'Alle sechs Artikel angeben: pillowcase, flat_sheet, fitted_sheet, bath_towel, towel, bath_mat.'
+      description: 'Alle sechs Artikel angeben: pillowcase, flat_sheet, duvet_cover, bath_towel, towel, bath_mat.'
       selector:
         object:
 
@@ -250,7 +250,7 @@ record_clean_laundry_receipt:
         text:
     items:
       required: true
-      description: 'Alle sechs Mengen als Objekt, z.B. {pillowcase: 2, flat_sheet: 2, fitted_sheet: 2, bath_towel: 2, towel: 2, bath_mat: 0}.'
+      description: 'Alle sechs Mengen als Objekt, z.B. {pillowcase: 2, flat_sheet: 2, duvet_cover: 2, bath_towel: 2, towel: 2, bath_mat: 0}.'
       selector:
         object:
 

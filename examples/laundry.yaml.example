@@ -9,9 +9,9 @@ products:
     name: Laken
     unit: Stk
     net_unit_price: 2.00
-  fitted_sheet:
+  duvet_cover:
     position: 2
-    name: Spannbetttuch
+    name: Bettdeckenbezug
     unit: Stk
     net_unit_price: 1.80
   pillowcase:
@@ -36,7 +36,7 @@ products:
     net_unit_price: 0.70
 
 # Used by the optional "Lagerbestand / Sets" ordering mode.
-# 1 Set = 1 Kopfkissenbezug + 1 Laken + 1 Spannbetttuch + 1 Badetuch + 1 Handtuch.
+# 1 Set = 1 Kopfkissenbezug + 1 Laken + 1 Bettdeckenbezug + 1 Badetuch + 1 Handtuch.
 # Badvorleger sind KEIN Bestandteil eines Sets und werden separat gezählt.
 # Anfangsbestand nach Bestandsaufnahme: 24 Sets, 6 Badvorleger.
 # Preise hier sind nur Platzhalter; örtliche Wäschereipreise separat eintragen.
@@ -45,13 +45,13 @@ stock_order:
   item_products:
     pillowcase: pillowcase
     flat_sheet: flat_sheet
-    fitted_sheet: fitted_sheet
+    duvet_cover: duvet_cover
     bath_towel: bath_towel
     towel: towel
     bath_mat: bath_mat
   set_products:
     flat_sheet: 1
-    fitted_sheet: 1
+    duvet_cover: 1
     pillowcase: 1
     towel: 1
     bath_towel: 1
@@ -63,7 +63,7 @@ houses:
     enabled: false
     laundry:
       flat_sheet: 2
-      fitted_sheet: 2
+      duvet_cover: 2
       pillowcase: 2
       towel: 2
       bath_towel: 2
@@ -74,7 +74,7 @@ houses:
     enabled: false
     laundry:
       flat_sheet: 4
-      fitted_sheet: 4
+      duvet_cover: 4
       pillowcase: 4
       towel: 4
       bath_towel: 4
