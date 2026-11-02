@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.8 — 2026-11-02
+
+- Add standalone `smoobu_mittelhof.process_nuki_only` and `smoobu_mittelhof.process_laundry_only` services with optional `force_notify` flag. A manual NUKI request will never process laundry/order status or send a laundry notification, and a laundry request will never process NUKI.
+- Update NUKI and laundry resend/reset integration buttons to invoke their respective isolated workflow handlers.
+- Retire the combined `Wäsche + NUKI jetzt prüfen` integration button. Keep the legacy `process_workflows` service and periodic combined coordinator maintenance for backward compatibility; no shared operator action or destructive combined reset on dashboards.
+- Dashboard Mittelhof now displays separate NUKI-only diagnostics; dedicated `reinigung.yaml` remains read-only and exclusively shows laundry health, stock and Smoobu bookings.
+
+
 ## 0.6.7 — 2026-11-02
 
 - Correct Mittelhof's fifth linen-set article ID: `duvet_cover` (Bettdeckenbezug) replaces the incorrectly assumed `fitted_sheet` (Spannbetttuch); keep `flat_sheet` as Laken.

@@ -77,8 +77,8 @@ reload_files:
   description: Prüft die externe Wäschereikonfiguration. Templates werden bei jeder Verwendung neu geladen.
 
 process_workflows:
-  name: Wäsche + NUKI jetzt prüfen
-  description: Führt die vollständige Wäsche- und NUKI-Prozesslogik sofort aus.
+  name: Beide Workflows verarbeiten (Legacy)
+  description: Kompatibilitätsaktion für bestehende Automationen; die Bedienoberfläche nutzt getrennte NUKI- und Wäsche-Aktionen.
   fields:
     force_laundry_notify:
       required: false
@@ -273,3 +273,25 @@ sync_portal_laundry_stock:
       description: Bestätigte Portal-Buchungs- und Lieferereignisse seit dem letzten bestätigten Cursor.
       selector:
         object:
+
+process_nuki_only:
+  name: Nur NUKI-Prozess prüfen
+  description: Prüft ausschließlich NUKI-Gastzugänge und ggf. deren Benachrichtigungen, ohne Wäschebestände oder Wäschebestellungen zu verarbeiten.
+  fields:
+    force_notify:
+      name: NUKI-Benachrichtigung erzwingen
+      required: false
+      default: false
+      selector:
+        boolean:
+
+process_laundry_only:
+  name: Nur Wäsche-Bestellbedarf prüfen
+  description: Prüft ausschließlich den aus dem Portal replizierten Wäschebestand und ggf. offene Bestellbenachrichtigungen; verändert keine Lagerzahlen.
+  fields:
+    force_notify:
+      name: Wäsche-Benachrichtigung erzwingen
+      required: false
+      default: false
+      selector:
+        boolean:

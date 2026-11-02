@@ -20,7 +20,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
         LaundryResetButton(runtime, entry.entry_id),
         NukiResendButton(runtime, entry.entry_id),
         NukiResetButton(runtime, entry.entry_id),
-        ProcessWorkflowsButton(runtime, entry.entry_id),
     ])
 
 
@@ -74,7 +73,7 @@ class LaundryResendButton(BaseButton):
         super().__init__(runtime, entry_id, "laundry_resend")
 
     async def async_press(self) -> None:
-        await self._runtime.workflow.async_process(force_laundry_notify=True)
+        await self._runtime.workflow.async_process_laundry_only(force_notify=True)
 
 
 class LaundryResetButton(BaseButton):
@@ -99,7 +98,7 @@ class NukiResendButton(BaseButton):
         super().__init__(runtime, entry_id, "nuki_resend")
 
     async def async_press(self) -> None:
-        await self._runtime.workflow.async_process(force_nuki_notify=True)
+        await self._runtime.workflow.async_process_nuki_only(force_notify=True)
 
 
 class NukiResetButton(BaseButton):
@@ -114,17 +113,3 @@ class NukiResetButton(BaseButton):
         await self._runtime.workflow.async_reset_nuki()
         await self._runtime.workflow.async_process(force_nuki_notify=True)
 
-
-class ProcessWorkflowsButton(BaseButton):
-    _attr_name = "Wäsche + NUKI jetzt prüfen"
-    _attr_icon = "mdi:play-circle-outline"
-    _attr_suggested_object_id = "smoobu_mittelhof_workflows_jetzt_pruefen"
-
-    def __init__(self, runtime: SmoobuRuntime, entry_id: str) -> None:
-        super().__init__(runtime, entry_id, "process_workflows")
-
-    async def async_press(self) -> None:
-        await self._runtime.workflow.async_process(
-            force_laundry_notify=True,
-            force_nuki_notify=True,
-        )

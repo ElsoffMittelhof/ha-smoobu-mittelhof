@@ -363,6 +363,20 @@ class WorkflowManager:
             }
             await self._persist()
 
+    async def async_process_laundry_only(self, *, force_notify: bool = False) -> None:
+        """Process ONLY laundry; leave NUKI jobs and notifications untouched."""
+        async with self._lock:
+            bookings = valid_bookings(self.runtime.coordinator.data or [], self.runtime.houses)
+            await self._process_laundry(bookings, force_notify=force_notify)
+            await self._persist()
+
+    async def async_process_nuki_only(self, *, force_notify: bool = False) -> None:
+        """Process ONLY NUKI; leave portal stock/order workflows untouched."""
+        async with self._lock:
+            bookings = valid_bookings(self.runtime.coordinator.data or [], self.runtime.houses)
+            await self._process_nuki(bookings, force_notify=force_notify)
+            await self._persist()
+
     # ------------------------------------------------------------------
     # Laundry
     # ------------------------------------------------------------------
