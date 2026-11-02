@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.6 — 2026-11-02
+
+- Uberspace staff portal is the single source of truth for the six available clean-laundry items; HA receives an exact, monotonic versioned snapshot with `smoobu_mittelhof.sync_portal_laundry_stock`.
+- HA records portal-confirmed Smoobu checkout and ordered-delivery status without deducting/crediting physical inventory again. Replication event IDs prevent repeated receipt processing.
+- Once mirrored, direct legacy HA consumption, receipt and inventory write actions are blocked. Stock thresholds and actionable notification/order-email workflow remain in HA.
+- Requires import of the new bidirectional Node-RED status/replica flow and retirement of the old OUTBOUND ONLY agent.
+
+
 ## 0.6.5 — 2026-11-01
 
 - Add idempotent service `smoobu_mittelhof.record_clean_laundry_receipt` for physical access of clean linen without a linked purchase order. An identical portal receipt ID can never increase stock twice; a conflicting reuse is rejected.
