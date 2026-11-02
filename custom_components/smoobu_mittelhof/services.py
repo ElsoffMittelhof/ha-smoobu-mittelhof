@@ -21,6 +21,7 @@ from .const import (
     SERVICE_RECONCILE_LAUNDRY_ITEMS,
     SERVICE_RECEIVE_LAUNDRY_DELIVERY,
     SERVICE_RECORD_CLEAN_LAUNDRY_RECEIPT,
+    SERVICE_SYNC_PORTAL_LAUNDRY_STOCK,
     SERVICE_NUKI_COMMAND,
     SERVICE_PREVIEW_TEMPLATE,
     SERVICE_PROCESS_WORKFLOWS,
@@ -167,6 +168,12 @@ async def async_register_services(hass: HomeAssistant) -> None:
         runtime = _runtime(hass)
         await runtime.workflow.async_record_clean_laundry_receipt(
             str(call.data["receipt_id"]), dict(call.data["items"])
+        )
+
+    async def sync_portal_laundry_stock(call: ServiceCall) -> None:
+        runtime=_runtime(hass)
+        await runtime.workflow.async_sync_portal_laundry_stock(
+            int(call.data["revision"]),dict(call.data["items"]),list(call.data["events"])
         )
 
     async def nuki_command(call: ServiceCall) -> None:
@@ -316,6 +323,19 @@ async def async_register_services(hass: HomeAssistant) -> None:
                 vol.Required(key): vol.All(vol.Coerce(int), vol.Range(min=0, max=100))
                 for key in ITEM_KEYS
             }),
+        }),
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_SYNC_PORTAL_LAUNDRY_STOCK,
+        sync_portal_laundry_stock,
+        schema=vol.Schema({
+            vol.Required("revision"): vol.All(vol.Coerce(int),vol.Range(min=1)),
+            vol.Required("items"): vol.Schema({
+                vol.Required(key): vol.All(vol.Coerce(int),vol.Range(min=0,max=100000))
+                for key in ITEM_KEYS
+            }),
+            vol.Required("events"): [dict],
         }),
     )
     hass.services.async_register(
