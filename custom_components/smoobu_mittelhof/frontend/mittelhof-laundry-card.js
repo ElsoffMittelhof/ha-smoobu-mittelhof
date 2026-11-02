@@ -1,6 +1,6 @@
 /* Mittelhof v0.6 – HA-only warehouse card; no external network access. */
 (() => {
-  const labels={pillowcase:"Kopfkissenbezüge",flat_sheet:"Laken",fitted_sheet:"Spannbetttücher",
+  const labels={pillowcase:"Kopfkissenbezüge",flat_sheet:"Laken",duvet_cover:"Bettdeckenbezüge",
     bath_towel:"Badetücher",towel:"Handtücher",bath_mat:"Badvorleger"};
   const keys=Object.keys(labels);
   const houses=[["Haus 13",1046730],["Haus 14",1069726],["Haus 15",1069729]];
@@ -68,7 +68,7 @@
       root.append(css);
       const body=el("div",null,"card");root.append(body);
       body.append(el("h2","Mittelhof · Wäschebestand"));
-      body.append(el("p","Ein Set = 1 Kopfkissenbezug, 1 Laken, 1 Spannbetttuch, 1 Badetuch, 1 Handtuch. Badvorleger separat.","note"));
+      body.append(el("p","Ein Set = 1 Kopfkissenbezug, 1 Laken, 1 Bettdeckenbezug, 1 Badetuch, 1 Handtuch. Badvorleger separat.","note"));
       const start=a.laundry_tracking_start_date||"2026-11-01";
       const stock=a.laundry_stock_items;
       if(!stock||keys.some(k=>!Number.isInteger(stock[k]))){
