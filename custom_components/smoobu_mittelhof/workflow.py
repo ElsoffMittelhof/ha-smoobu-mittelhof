@@ -74,6 +74,7 @@ from .laundry_stock import (
     expand_items,
     ensure_item_stock,
     sync_legacy_stock,
+    apply_portal_stock_mirror,
     apply_article_consumption,
     reconcile_article_inventory,
     suggested_article_order,
@@ -790,9 +791,8 @@ class WorkflowManager:
                 self._stock_option(CONF_LAUNDRY_INITIAL_STOCK_SETS, DEFAULT_LAUNDRY_INITIAL_STOCK_SETS),
                 _iso_now(), dt_util.now().date().isoformat(),
                 self._stock_option(CONF_LAUNDRY_INITIAL_STOCK_MATS, DEFAULT_LAUNDRY_INITIAL_STOCK_MATS))
-            stock.update(items=dict(items),authority="portal",portal_revision=revision,
-                portal_event_cursor=next_cursor,last_portal_sync_at=_iso_now())
-            sync_legacy_stock(stock)
+            apply_portal_stock_mirror(stock,revision,items,_iso_now())
+            stock["portal_event_cursor"]=next_cursor
             self.runtime.store.laundry_consumptions.clear()
             self.runtime.store.laundry_consumptions.update(consumptions)
             self.runtime.store.laundry_requests.clear()
