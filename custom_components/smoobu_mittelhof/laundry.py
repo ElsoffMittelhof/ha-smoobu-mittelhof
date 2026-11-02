@@ -107,7 +107,7 @@ class LaundryRepository:
             stock_order:
               set_products:
                 flat_sheet: 1
-                fitted_sheet: 1
+                duvet_cover: 1
                 pillowcase: 1
                 towel: 1
                 bath_towel: 1
@@ -201,7 +201,7 @@ class LaundryRepository:
     def calculate_item_stock_order(self, items: dict[str, int]) -> dict[str, Any]:
         """Price precisely the six individual articles from the *local* laundry.yaml.
 
-        Never silently replace an unrecognised flat sheet with a duvet cover.
+        Never silently interpret a duvet cover as a sheet.
         An invalid/missing product mapping blocks emailing the supplier.
         """
         from .laundry_stock import ITEM_KEYS, SET_ITEMS
@@ -228,7 +228,7 @@ class LaundryRepository:
             else:
                 inferred, mat = self._infer_stock_products(products)
                 if len(inferred) != 5 or len(set(inferred)) != 5:
-                    raise LaundryConfigError("Unique flat sheet and fitted sheet required")
+                    raise LaundryConfigError("Unique sheet and duvet cover required")
                 mapping = {key: key for key in ITEM_KEYS if key in products}
                 mapping["bath_mat"] = str(mat or "")
                 if not all(mapping.get(key) and mapping[key] in products for key in ITEM_KEYS):
@@ -296,9 +296,9 @@ class LaundryRepository:
         bath_mat = find("badevorleger", "bathmat", "badvorleger", "badematte")
         small_towel = find("handtuch", "towel", exclude=("badetuch", "badtuch", "bathtowel"))
         flat_sheet = find("laken", "flatsheet", "betttuch", exclude=("spann", "fitted"))
-        fitted_sheet = find("spannbetttuch", "spannbett", "fittedsheet")
+        duvet_cover = find("duvetcover", "deckenbezug", "systemwaschebezug", "systemwäschebezug")
 
-        resolved = [flat_sheet, fitted_sheet, pillow, small_towel, bath_towel]
+        resolved = [flat_sheet, duvet_cover, pillow, small_towel, bath_towel]
         if any(key is None for key in resolved):
             raise LaundryConfigError(
                 "Could not infer all five stock-set products. Configure stock_order.set_products in laundry.yaml"
