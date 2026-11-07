@@ -117,3 +117,13 @@ Die genaue automatische Rabattstaffel nach Mietdauer wurde noch nicht definiert;
 
 Die private Rechnungssteller-/Bank-Konfiguration liegt ausschließlich beim eigenen Rechnungsdienst. Im öffentlichen HACS-Repository befinden sich **keine** echten Namen, USt-IDs, IBANs oder BICs. Release-Kandidat bis zur echten HA- und Steuerabnahme weiterhin nur DEMO.
 
+
+## Bestätigter Mietdauernachlass – ab 0.7.0rc3
+
+- 1–7 Übernachtungen: 0 % Nachlass.
+- **Ab der 8. Übernachtung: 10 % auf die gesamte Brutto-Miete**, nicht auf Reinigung, Zusatzpersonen oder Hunde. Der gesamte Mietbetrag erhält ab Erreichen der acht Nächte den Nachlass; nicht nur Nächte ab der achten.
+- Die Rabattposition wird beim Speichern einer als `rent` eingestuften Mietposition automatisch als negatives 7-%-Entgelt erzeugt/ersetzt und nach `ROUND_HALF_UP` auf volle Cent gerundet. Mehrfaches Speichern addiert den Rabatt nicht mehrfach.
+- HA zeigt den nach Nachlass berechneten Bruttogesamtbetrag; im privaten Demo-ZUGFeRD-Backend wird die Staffel unabhängig noch einmal überprüft und ein falscher/manuell erfundener Betrag gesperrt.
+- Bei nicht klassifizierten Smoobu-Preispositionen keine automatische Rabattierung oder Änderung des überlieferten Gesamtbetrags. Erst die Mietposition manuell zuordnen. Die Quellsumme kann bereits Rabatte enthalten; Bearbeiter müssen die Positionen abgleichen, bevor eine DEMO-Musterrechnung angefordert wird.
+- Beispiel 8 Nächte, Miete 1.000 €, Reinigung 80 €, Hund 40 € → Mietdauernachlass −100 €, Rechnungsbrutto 1.020 € (7 % innerhalb der Bruttozahlen).
+- Produktive Rechnungsausstellung und Gastversand weiterhin nicht aktiviert.
