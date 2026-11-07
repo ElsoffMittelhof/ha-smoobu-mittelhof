@@ -150,6 +150,36 @@ class TestGuestDrafts(unittest.TestCase):
         self.assertEqual(report["outstanding"], "220.00")
         self.assertFalse(report["ready_for_issuance"])
 
+    def test_payment_context_message_never_assumes_portal_is_paid(self):
+        ctx = {"guest": "Muster Gast", "house": "Haus 13", "arrival": "2027-06-01",
+               "departure": "2027-06-05", "language": "de"}
+        inv = mod.make_draft(booking())["invoice"]
+        inv["payment_flow"] = "platform"
+        msg = mod.compose_message(ctx, inv)
+        self.assertIn("wird derzeit geprüft", msg["body"])
+        self.assertNotIn("als bezahlt bestätigt", msg["body"])
+
+    def test_context_message_after_verified_platform_payment(self):
+        inv = mod.make_draft(booking())["invoice"]
+        inv["payment_flow"] = "platform"
+        inv["paid_amount"] = "420.00"
+        inv["payment_verified"] = True
+        msg = mod.compose_message({"guest": "Test", "house": "House",
+                                   "language": "en"}, inv)
+        self.assertIn("No additional transfer", msg["body"])
+        self.assertNotIn("Please pay by", msg["body"])
+
+    def test_context_message_for_invoice_requires_verified_bank_details(self):
+        inv = mod.make_draft(booking())["invoice"]
+        inv["payment_flow"] = "guest_invoice"
+        inv["payment_verified"] = True
+        inv["due_date"] = "2027-01-01"
+        text = mod.compose_message({"guest": "Test", "language": "de"}, inv)
+        self.assertNotIn("Bitte überweisen Sie", text["body"])
+        inv["payment_note"] = "Banküberweisung an das Geschäftskonto"
+        text = mod.compose_message({"guest": "Test", "language": "de"}, inv)
+        self.assertIn("Bitte überweisen Sie", text["body"])
+
     def test_missing_reservation_id_fails(self):
         b = booking()
         b["id"] = None
