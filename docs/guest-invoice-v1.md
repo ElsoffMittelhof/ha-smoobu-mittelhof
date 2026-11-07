@@ -9,7 +9,7 @@ Status: **feature branch / review only**. Do not release or enable against real 
   - \`GET /api/reservations/{id}?includePriceElements=true\`
   - \`GET /api/reservations/{id}/messages\` (all pages, max 100)
   - \`POST /api/reservations/{id}/messages/send-message-to-guest\` ONLY after two explicit admin actions.
-- Prepare an editable message and invoice **draft** for nonblocked bookings belonging to configured houses, up to 730 days in the future and 30 days in the past, whenever the regular booking coordinator refreshes.
+- Prepare an editable message and invoice **draft** for nonblocked bookings belonging to configured houses, up to 730 days in the future and 30 days in the past, at startup, on coordinator refresh, and independently every 30 minutes.
 - Drafts persist in an independent Home Assistant Store; message conversations themselves are read live and never copied to state attributes.
 - Edit billing name/address, line items (including discounts), total, amount already paid, payment confirmation, due date, payment method, explanatory/steering text and message subject/body.
 - Show a branded **non-issued** invoice preview with itemized gross totals and invoice preflight consistency checks (missing address, gross/line mismatch, pending tax review, payment uncertainty).
@@ -70,3 +70,5 @@ The next invoice engine will use ZUGFeRD 2.5.2/EN16931 in PDF/A-3, including con
 - PDF/A-3 and embedded XML extraction/EN16931 Schematron validation with a known-good validator such as Mustangproject, test vectors including mixed tax rates and cancellations.
 - Full privacy/backup, retention, concurrency, availability, and real HA/UI testing before release.
 
+
+- The 30-minute synchronization is serialized and runs outside startup-critical Wäsche/NUKI setup. Smoobu source-difference acknowledgement is explicit; pending edits remain preserved.
