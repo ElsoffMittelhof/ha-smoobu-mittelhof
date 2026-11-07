@@ -189,7 +189,7 @@ class TestGuestDrafts(unittest.TestCase):
             "recipient_city": "Musterstadt", "recipient_country": "DE",
             "payment_verified": True, "payment_flow": "guest_invoice",
             "due_date": "2027-01-01", "line_items": [
-                {"description": "Aufenthalt", "gross": "420.00", "tax_rate": "7"}
+                {"description": "Miete", "gross": "420.00", "tax_rate": "7", "position_type": "rent", "quantity": 1}
             ],
         }})
         queued = mod.request_invoice_demo_preview(ready)
@@ -210,7 +210,7 @@ class TestGuestDrafts(unittest.TestCase):
             "recipient_city": "Musterstadt", "recipient_country": "DE",
             "payment_flow": "platform", "payment_verified": True,
         }})
-        with self.assertRaisesRegex(ValueError, "Steuersatz"):
+        with self.assertRaisesRegex(ValueError, "Leistungsart"):
             mod.request_invoice_demo_preview(ready)
         changed = mod.revise_draft(ready, {"invoice": {
             "line_items": [{"description": "Aufenthalt", "gross": "420.00", "tax_rate": "19"}],
@@ -218,6 +218,41 @@ class TestGuestDrafts(unittest.TestCase):
         }})
         with self.assertRaisesRegex(ValueError, "Zahlungs"):
             mod.request_invoice_demo_preview(changed)
+
+    def test_mittelhof_5_positions_and_two_person_dog_limits(self):
+        lines = [
+            {"position_type": "rent", "description": "Miete", "gross": "500.00", "vat_rate": "7"},
+            {"position_type": "cleaning", "description": "Reinigung", "gross": "50.00", "vat_rate": "7"},
+            {"position_type": "extra_person", "description": "Zusätzliche Person", "gross": "40.00", "vat_rate": "7", "quantity": 2},
+            {"position_type": "dog", "description": "Hund", "gross": "20.00", "vat_rate": "7", "quantity": 2},
+            {"position_type": "stay_discount", "description": "Nachlass", "gross": "-30.00", "vat_rate": "7",
+             "discount_nights": 4, "discount_rule": "4 Nächte, Betreiber-Rabatt schriftlich geprüft"},
+        ]
+        mod.validate_mittelhof_positions(lines, "2027-01-10", "2027-01-14")
+        for index in (2, 3):
+            bad = [dict(item) for item in lines]
+            bad[index]["quantity"] = 3
+            with self.assertRaises(ValueError):
+                mod.validate_mittelhof_positions(bad, "2027-01-10", "2027-01-14")
+        wrong = [dict(item) for item in lines]
+        wrong[0]["vat_rate"] = "19"
+        with self.assertRaisesRegex(ValueError, "7"):
+            mod.validate_mittelhof_positions(wrong, "2027-01-10", "2027-01-14")
+
+    def test_discount_requires_explicit_duration_rule_not_fictional_threshold(self):
+        data = [
+            {"position_type": "rent", "description": "Miete", "gross": "500.00", "tax_rate": "7"},
+            {"position_type": "stay_discount", "description": "Nachlass", "gross": "-10.00", "tax_rate": "7",
+             "discount_nights": 4, "discount_rule": ""},
+        ]
+        with self.assertRaisesRegex(ValueError, "Rabattstaffel"):
+            mod.validate_mittelhof_positions(data, "2027-01-10", "2027-01-14")
+        data[1]["discount_rule"] = "manuell bestätigte 4-Nächte-Regel"
+        data[1]["discount_nights"] = 5
+        with self.assertRaisesRegex(ValueError, "Aufenthaltsnächte"):
+            mod.validate_mittelhof_positions(data, "2027-01-10", "2027-01-14")
+        data[1]["discount_nights"] = 4
+        mod.validate_mittelhof_positions(data, "2027-01-10", "2027-01-14")
 
     def test_sent_message_stays_immutable_while_invoice_changes(self):
         draft = mod.make_draft(booking())
