@@ -97,6 +97,143 @@ class MittelhofGuestCard extends HTMLElement {
       '</label>';
   }
 
+  _positionRow(item = {}) {
+    const esc = MittelhofGuestCard.esc;
+    const names = [
+      ["rent", "Miete"], ["cleaning", "Reinigung"],
+      ["extra_person", "Zusätzliche Person"], ["dog", "Hund"],
+      ["stay_discount", "Nachlass nach Mietdauer"]
+    ];
+    const kind = item.position_type || "";
+    const pick = names.map(([key, name]) =>
+      '<option value="' + key + '"' + (kind === key ? ' selected' : '') +
+      '>' + name + '</option>').join("");
+    return '<div class="position-row" data-position-row>' +
+      '<label>Art der Leistung<select data-field="position_type">' +
+      '<option value="">Bitte auswählen</option>' + pick + '</select></label>' +
+      '<label>Beschreibung<input data-field="description" value="' +
+      esc(item.description || "") + '"></label>' +
+      '<label>Menge (Person/Hund max. 2)<input type="number" min="1" max="2" step="1" ' +
+      'data-field="quantity" value="' + esc(item.quantity ?? 1) + '"></label>' +
+      '<label>Brutto für diese Position (€)<input data-field="gross" ' +
+      'inputmode="decimal" value="' + esc(item.gross ?? "0.00") + '"></label>' +
+      '<label>Umsatzsteuer<input value="7 % (Mittelhof-Leistung)" disabled></label>' +
+      '<label>Bei Nachlass: bestätigte Rabattstaffel<input data-field="discount_rule" ' +
+      'placeholder="z. B. bestätigte 7-Nächte-Staffel" value="' +
+      esc(item.discount_rule || "") + '"></label>' +
+      '<label>Bei Nachlass: Anzahl Übernachtungen<input data-field="discount_nights" ' +
+      'type="number" min="1" max="365" step="1" value="' +
+      esc(item.discount_nights ?? "") + '"></label>' +
+      '<button type="button" data-remove-position>Position entfernen</button>' +
+      '</div>';
+  }
+
+  _positionEditor(invoice) {
+    const rows = (invoice.line_items || []).map((item) => this._positionRow(item)).join("");
+    return '<h4>Rechnungspositionen (alle 7 %)</h4>' +
+      '<p class="meta">Miete und Reinigung einmal; zusätzliche Personen und Hunde jeweils ' +
+      'maximal 2. Ein Nachlass ist negativ und braucht die bestätigte ' +
+      'Übernachtungs-Staffel. Brutto je Zeile ist der Gesamtpreis dieser Menge.</p>' +
+      '<div data-position-list>' + rows + '</div>' +
+      '<button type="button" data-add-position>Position hinzufügen</button>' +
+      '<button type="button" data-use-position-total>Positionssumme übernehmen</button>' +
+      '<p class="meta" data-position-total>Positionssumme wird beim Speichern geprüft.</p>';
+  }
+
+  _collectLines() {
+    const rows = Array.from(this.shadowRoot.querySelectorAll('[data-position-row]'));
+    return rows.map((row) => {
+      const v = (name) => row.querySelector('[data-field="' + name + '"]').value;
+      const kind = v("position_type");
+      const qty = Number(v("quantity"));
+      if (!Number.isSafeInteger(qty)) throw new Error("Menge muss ganzzahlig sein");
+      const line = {
+        position_type: kind, description: v("description"),
+        quantity: qty, gross: v("gross").replace(",", "."), tax_rate: "7"
+      };
+      if (kind === "stay_discount") {
+        const nights = Number(v("discount_nights"));
+        if (!Number.isSafeInteger(nights) || nights < 1)
+          throw new Error("Für den Mietdauernachlass bitte die Nächte angeben");
+        line.discount_nights = nights;
+        line.discount_rule = v("discount_rule");
+      }
+      return line;
+    });
+  }
+
+  _positionSumCents() {
+    const rows = this._collectLines();
+    return rows.reduce((sum, item) => {
+      const value = String(item.gross).trim();
+      if (!/^-?\d+(?:\.\d{1,2})?$/.test(value)) {
+        throw new Error("Jede Position braucht einen Brutto-Betrag mit maximal zwei Dezimalstellen");
+      }
+      const minus = value.startsWith("-") ? -1n : 1n;
+      const parts = value.replace("-", "").split(".");
+      return sum + minus * (BigInt(parts[0]) * 100n +
+        BigInt((parts[1] || "").padEnd(2, "0")));
+    }, 0n);
+  }
+
+  _positionSumText() {
+    const cents = this._positionSumCents();
+    const magnitude = cents < 0n ? -cents : cents;
+    return (cents < 0n ? "-" : "") +
+      String(magnitude / 100n) + "." +
+      String(magnitude % 100n).padStart(2, "0");
+  }
+
+  _markUnsaved() {
+    this._hasUnsaved = true;
+    for (const op of ["regenerate", "approve", "send", "preview-request",
+      "invoice-export", "demo-build", "demo-verify", "demo-approve",
+      "demo-archive", "demo-correction", "demo-download"]) {
+      const button = this.shadowRoot.querySelector('[data-op="' + op + '"]');
+      if (button) button.disabled = true;
+    }
+  }
+
+  _addPosition() {
+    const list = this.shadowRoot.querySelector('[data-position-list]');
+    if (!list || list.children.length >= 20) {
+      window.alert("Maximal 20 Rechnungspositionen zulässig");
+      return;
+    }
+    const kind = window.prompt(
+      "Position hinzufügen: rent (Miete), cleaning (Reinigung), " +
+      "extra_person (Zusätzliche Person), dog (Hund), stay_discount (Nachlass)"
+    );
+    const labels = {
+      rent: "Miete", cleaning: "Reinigung",
+      extra_person: "Zusätzliche Person", dog: "Hund",
+      stay_discount: "Nachlass aufgrund der Mietdauer"
+    };
+    if (kind === null) return;
+    const type = kind.trim().toLowerCase();
+    if (!labels[type]) {
+      window.alert("Bitte einen der fünf angegebenen Positionstypen eingeben");
+      return;
+    }
+    const arrival = Date.parse(this._selected?.booking?.arrival || "");
+    const departure = Date.parse(this._selected?.booking?.departure || "");
+    const nights = Number.isFinite(arrival) && Number.isFinite(departure) ?
+      Math.round((departure - arrival) / 86400000) : 0;
+    const row = {
+      position_type: type, description: labels[type], quantity: 1,
+      gross: type === "stay_discount" ? "-0.01" : "0.00",
+      discount_nights: type === "stay_discount" && nights > 0 ? nights : "",
+      discount_rule: ""
+    };
+    list.insertAdjacentHTML("beforeend", this._positionRow(row));
+    const added = list.lastElementChild;
+    added.querySelectorAll('[data-field]').forEach((el) =>
+      el.addEventListener("input", () => this._markUnsaved()));
+    added.querySelector('[data-remove-position]').addEventListener("click",
+      () => { added.remove(); this._markUnsaved(); });
+    this._markUnsaved();
+  }
+
   _collectInvoice() {
     const root = this.shadowRoot;
     const values = {};
@@ -111,7 +248,7 @@ class MittelhofGuestCard extends HTMLElement {
     }
     values.payment_flow = root.querySelector('[data-field="payment_flow"]').value;
     values.payment_verified = root.querySelector('[data-field="payment_verified"]').checked;
-    values.line_items = JSON.parse(root.querySelector('[data-field="line_items"]').value);
+    values.line_items = this._collectLines();
     return values;
   }
 
@@ -397,7 +534,7 @@ class MittelhofGuestCard extends HTMLElement {
       (inv.payment_verified ? ' checked' : '') + ' /> Zahlung manuell geprüft</label>' +
       this._field("payment_note", "Zahlungshinweis", inv.payment_note, true) +
       this._field("tax_note", "Steuerhinweis (fachlich prüfen)", inv.tax_note, true) +
-      this._field("line_items", "Positionen als JSON (inkl. steuerlicher Einordnung)", JSON.stringify(inv.line_items, null, 2), true) +
+      this._positionEditor(inv) +
       '<p class="warning">Nur DEMO-Mustervorschau im privaten Rechnungsdienst; keine echte Ausstellung oder Versand.</p>' +
       '</section><section><h4>Nachrichtenentwurf</h4>' +
       this._field("subject", "Betreff", msg.subject) +
@@ -454,7 +591,7 @@ class MittelhofGuestCard extends HTMLElement {
       '.history{max-height:330px;overflow:auto;padding:8px;border:1px solid var(--divider-color);border-radius:8px;margin-bottom:15px}' +
       '.bubble{padding:10px;border-radius:8px;margin:5px 0;white-space:pre-wrap;background:var(--secondary-background-color)}' +
       '.bubble.outgoing{margin-left:12%}.bubble.incoming{margin-right:12%}.body{white-space:pre-wrap;overflow-wrap:anywhere}' +
-      '.edit-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}label{display:flex;flex-direction:column;gap:3px;margin:10px 0;font-size:13px}' +
+      '.edit-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}.position-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;border:1px solid var(--divider-color);padding:8px;margin:8px 0;border-radius:6px}.position-row button{align-self:end}label{display:flex;flex-direction:column;gap:3px;margin:10px 0;font-size:13px}' +
       'input,textarea,select{box-sizing:border-box;width:100%;background:var(--card-background-color);color:var(--primary-text-color);border:1px solid var(--divider-color);padding:8px;border-radius:6px;font:inherit}' +
       'textarea{min-height:80px}.checkbox{flex-direction:row;align-items:center}.checkbox input{width:auto}' +
       'button{cursor:pointer;border:1px solid var(--divider-color);border-radius:7px;padding:9px;background:var(--secondary-background-color);color:var(--primary-text-color)}' +
@@ -467,13 +604,24 @@ class MittelhofGuestCard extends HTMLElement {
       '<div class="layout"><aside>' + this._renderInbox() + '</aside><main>' +
       this._renderBooking() + '</main></div></ha-card>';
     this.shadowRoot.querySelectorAll('[data-field]').forEach((el) =>
-      el.addEventListener("input", () => {
-        this._hasUnsaved = true;
-        for (const op of ["regenerate", "approve", "send"]) {
-          const button = this.shadowRoot.querySelector('[data-op="' + op + '"]');
-          if (button) button.disabled = true;
-        }
+      el.addEventListener("input", () => this._markUnsaved()));
+    this.shadowRoot.querySelectorAll('[data-remove-position]').forEach((el) =>
+      el.addEventListener("click", () => {
+        el.closest('[data-position-row]').remove();
+        this._markUnsaved();
       }));
+    this.shadowRoot.querySelector('[data-add-position]')?.addEventListener(
+      "click", () => this._addPosition());
+    this.shadowRoot.querySelector('[data-use-position-total]')?.addEventListener(
+      "click", () => {
+        try {
+          const total = this._positionSumText();
+          this.shadowRoot.querySelector('[data-field="total_gross"]').value = total;
+          const info = this.shadowRoot.querySelector('[data-position-total]');
+          if (info) info.textContent = "Positionssumme: " + total + " €";
+          this._markUnsaved();
+        } catch (err) { window.alert(String(err.message || err)); }
+      });
     this.shadowRoot.querySelectorAll('.logo,.invoice-logo').forEach((logo) =>
       logo.addEventListener("error", () => { logo.style.display = "none"; }));
     this.shadowRoot.querySelectorAll('[data-booking]').forEach((el) =>
