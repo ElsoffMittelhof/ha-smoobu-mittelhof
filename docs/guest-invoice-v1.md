@@ -85,3 +85,17 @@ The next invoice engine will use ZUGFeRD 2.5.2/EN16931 in PDF/A-3, including con
 - Der private Rechnungs-Engine-Branch kann den Export entweder als lokale JSON-Datei übernehmen oder über eine mit `MITTELHOF_HA_TOKEN` authentifizierte HTTPS-/Loopback-Abfrage direkt aus HA holen. Die Zuordnung Smoobu-Apartment-ID → Hausnummer wird **nochmals unabhängig** im privaten Dienst geprüft.
 - Der private Renderer bleibt im **TEST-Modus**: In XML/PDF steht `DEMO-1320261210`, im Entwurf wird die künftige Originalnummer `1320261210` gezeigt. Damit entsteht **noch keine ausgestellte Rechnung**. Zusätzliche Steuerprüfung, GoBD-Archivierung, echte Nummernvergabe und HA-Laufzeittests sind weiterhin Release-Blocker.
 - Der private SQLite-Proposal-Journal-Hash-Verlauf schützt Tests auf logische Konsistenz, ist **kein manipulationssicheres GoBD-Belegarchiv**. Er wird nicht in GitHub oder Recorder synchronisiert.
+
+## Stufe 4 (2026-11-07): separate DEMO-Musterprüfungsanfrage
+
+Die Lovelace-Gastkarte enthält jetzt einen ausdrücklich beschrifteten Button zur DEMO-ZUGFeRD-Musterprüfung. Damit wird KEINE Rechnung erstellt, ausgestellt, freigegeben oder versendet.
+
+- POST /api/smoobu_mittelhof/guest/v1/bookings/{booking_id}/preview-request ist ausschließlich für angemeldete Home-Assistant-Administratoren verfügbar.
+- Zuerst müssen die strukturierte Empfängeranschrift, Brutto- und Positionssumme, 7%-/19%-Teststeuersätze sowie Zahlungsweg und Zahlungsprüfung in HA manuell gepflegt und die Revision gespeichert sein.
+- Nur ein aktueller Smoobu-Buchungs-Fingerprint mit eindeutigem Haus 13, 14 oder 15 wird akzeptiert.
+- Die Anforderung speichert state=requested und requested_revision für genau den gespeicherten Entwurf. Änderungen oder ein geänderter Smoobu-Buchungsstand machen die Anforderung ungültig.
+- Erst nach der Anforderung ist der read-only Export aus HA möglich. Der JSON-Export enthält preview_request={state:requested, revision:source_revision} und bleibt personenbezogen, deshalb lokal schützen.
+- Im privaten Mittelhof-Draft-PR #10 übernimmt die Test-Engine ausschließlich solche passenden Exporte. Der DEMO-Beleg wird danach manuell per PDF/XML-Prüfung geprüft und kann in einem separaten privaten TEST-Archiv mit Hash-Integritätsprüfung abgelegt werden.
+- Das private Testarchiv ist keine revisionssichere GoBD-/WORM-Rechnungsablage. Keine finale Nummernvergabe, kein Ausstellen, kein PDF-Anhang und kein Gastversand.
+
+Die bestehende produktive HACS-Integration und alle Wäsche-/NUKI-/IT.NRW-Workflows bleiben unverändert. Vor einem echten HA-Einsatz sind Laufzeit-/UI-Tests im Testsystem erforderlich.
