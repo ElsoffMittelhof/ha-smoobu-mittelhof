@@ -95,7 +95,10 @@ class TestGuestDrafts(unittest.TestCase):
         changed = booking(price=421)
         self.assertNotEqual(mod.booking_fingerprint(original), mod.booking_fingerprint(changed))
         changed = booking()
-        changed["modifiedAt"] = "unrelated"
+        changed["modifiedAt"] = "2026-11-07 10:00:00"
+        self.assertNotEqual(mod.booking_fingerprint(original), mod.booking_fingerprint(changed))
+        changed = booking()
+        changed["unrelatedApiAttribute"] = "unrelated"
         self.assertEqual(mod.booking_fingerprint(original), mod.booking_fingerprint(changed))
 
     def test_price_elements_not_double_counted(self):
