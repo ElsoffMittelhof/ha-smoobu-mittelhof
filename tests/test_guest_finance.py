@@ -128,7 +128,7 @@ class TestGuestDrafts(unittest.TestCase):
         invoice = mod.make_draft(booking())["invoice"]
         report = mod.invoice_preflight(invoice)
         self.assertFalse(report["ready_for_issuance"])
-        self.assertIn("Rechnungsanschrift fehlt", report["errors"])
+        self.assertIn("Strukturierte Rechnungsanschrift fehlt", report["errors"])
         self.assertEqual(report["outstanding"], "420.00")
 
     def test_invoice_preflight_detects_wrong_line_sum(self):
