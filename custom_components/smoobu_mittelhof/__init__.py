@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 from pathlib import Path
+import asyncio
 import logging
 
 from homeassistant.components.http import StaticPathConfig
@@ -11,6 +12,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryError
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.event import async_track_time_interval
 
 from .api import SmoobuApiClient
 from .const import (
@@ -186,15 +188,25 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await runtime.workflow.async_start()
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
+    guest_sync_lock = asyncio.Lock()
+
     async def _safe_sync_guest_drafts() -> None:
-        try:
-            await sync_guest_drafts(runtime)
-        except Exception:
-            # Guest draft sync must never interrupt existing NUKI/laundry services.
-            _LOGGER.exception("Guest draft synchronization failed")
+        if guest_sync_lock.locked():
+            return
+        async with guest_sync_lock:
+            try:
+                await sync_guest_drafts(runtime)
+            except Exception:
+                # Guest draft sync must never interrupt existing NUKI/laundry services.
+                _LOGGER.exception("Guest draft synchronization failed")
 
     runtime.guest_unsub = coordinator.async_add_listener(
         lambda: hass.async_create_task(_safe_sync_guest_drafts())
+    )
+    runtime.guest_timer_unsub = async_track_time_interval(
+        hass,
+        lambda _: hass.async_create_task(_safe_sync_guest_drafts()),
+        timedelta(minutes=30),
     )
     hass.async_create_task(_safe_sync_guest_drafts())
     return True
@@ -208,6 +220,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if unloaded:
         if runtime and runtime.guest_unsub:
             runtime.guest_unsub()
+        if runtime and runtime.guest_timer_unsub:
+            runtime.guest_timer_unsub()
         hass.data[DOMAIN].pop(entry.entry_id, None)
         if not hass.data[DOMAIN]:
             hass.data.pop(DOMAIN, None)
