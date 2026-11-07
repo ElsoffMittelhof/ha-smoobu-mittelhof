@@ -388,7 +388,8 @@ class InvoiceDraftExportView(HomeAssistantView):
                 text="Hausnummer 13/14/15 nicht eindeutig aus konfigurierter Unterkunft ableitbar"
             )
         review = draft.get("invoice_review") or {}
-        if (review.get("state") != "requested" or review.get("requested_revision") != draft["revision"]:
+        if (review.get("state") != "requested" or
+                review.get("requested_revision") != draft["revision"]):
             raise web.HTTPConflict(text="Bitte erst DEMO-Musterprüfung für aktuelle Revision anfordern")
         # Do not leak raw Smoobu records, access codes, messages or tokens.
         inv = draft["invoice"]
