@@ -17,7 +17,7 @@ from homeassistant.helpers.storage import Store
 
 from .bookings import valid_bookings
 from .const import DOMAIN
-from .guest_finance import approve_message, booking_fingerprint, make_draft, revise_draft, utc_now, invoice_preflight, compose_message
+from .guest_finance import approve_message, booking_fingerprint, make_draft, revise_draft, utc_now, invoice_preflight, compose_message, request_invoice_demo_preview
 from .invoice_numbers import planned_number, house_from_label
 
 DRAFT_STORAGE_KEY = f"{DOMAIN}.guest_drafts"
@@ -82,6 +82,9 @@ class GuestDraftRepository:
                         existing["message"]["status"] = "draft"
                         existing["message"]["approved_revision"] = None
                     existing["invoice"]["status"] = "draft"
+                    existing["invoice_review"] = {
+                        "state": "draft", "requested_revision": None, "requested_at": None
+                    }
                     existing["audit"].append({"at": utc_now(), "event": "booking_changed_needs_review"})
                     await self._save()
                 if acknowledge_source:
@@ -91,6 +94,9 @@ class GuestDraftRepository:
                     existing["source_channel_class"] = refreshed["source_channel_class"]
                     existing["booking_context"] = refreshed["booking_context"]
                     existing["source_change_pending"] = False
+                    existing["invoice_review"] = {
+                        "state": "draft", "requested_revision": None, "requested_at": None
+                    }
                     existing["revision"] += 1
                     existing["updated_at"] = utc_now()
                     existing["audit"].append({"at": utc_now(), "event": "source_change_acknowledged"})
@@ -130,8 +136,22 @@ class GuestDraftRepository:
                 approved_revision=None
             )
             updated["revision"] += 1
+            updated["invoice_review"] = {
+                "state": "draft", "requested_revision": None, "requested_at": None
+            }
             updated["updated_at"] = utc_now()
             updated["audit"].append({"at": utc_now(), "event": "message_regenerated"})
+            self._drafts[booking_id] = updated
+            await self._save()
+            return deepcopy(updated)
+
+    async def request_demo_invoice_preview(self, booking_id: str, revision: int) -> dict[str, Any]:
+        """Only queue the exact reviewed revision for a private DEMO test renderer."""
+        async with self._lock:
+            current = self._drafts.get(booking_id)
+            if current is None or current["revision"] != revision:
+                raise RuntimeError("Rechnungsentwurf ist zwischenzeitlich geändert worden")
+            updated = request_invoice_demo_preview(current)
             self._drafts[booking_id] = updated
             await self._save()
             return deepcopy(updated)
@@ -306,6 +326,39 @@ class GuestDraftView(HomeAssistantView):
             raise web.HTTPConflict(text=str(exc)) from exc
 
 
+class InvoiceDemoPreviewRequestView(HomeAssistantView):
+    """Admin-only request to export a DEMO draft; NEVER issues or mails anything."""
+    url = "/api/smoobu_mittelhof/guest/v1/bookings/{booking_id}/preview-request"
+    name = "api:smoobu_mittelhof:invoice_preview_request"
+    requires_auth = True
+
+    async def post(self, request: web.Request, booking_id: str):
+        _require_admin(request)
+        runtime = _get_runtime(request.app["hass"])
+        booking = await _checked_booking(runtime, booking_id)
+        draft = await runtime.guest_drafts.get(booking_id)
+        if not draft:
+            raise web.HTTPConflict(text="Rechnungsentwurf fehlt")
+        if (draft.get("source_change_pending") or
+                draft["source_fingerprint"] != booking_fingerprint(booking)):
+            await runtime.guest_drafts.prepare(booking)
+            raise web.HTTPConflict(text="Buchungsstand wurde geändert; bitte erneut prüfen")
+        apartment_id = int((booking.get("apartment") or {}).get("id") or 0)
+        label = runtime.houses.get(apartment_id, "")
+        if not planned_number(label, str(booking.get("arrival") or "")):
+            raise web.HTTPConflict(text="Hausnummer 13/14/15 muss eindeutig zugeordnet sein")
+        payload = await _parse_body(request)
+        try:
+            revision = int(payload["revision"])
+            return self.json(
+                await runtime.guest_drafts.request_demo_invoice_preview(booking_id, revision)
+            )
+        except (ValueError, TypeError, KeyError) as exc:
+            raise web.HTTPBadRequest(text=str(exc)) from exc
+        except RuntimeError as exc:
+            raise web.HTTPConflict(text=str(exc)) from exc
+
+
 class InvoiceDraftExportView(HomeAssistantView):
     """Read-only authenticated export for the SEPARATE PRIVATE invoice test engine.
 
@@ -334,6 +387,9 @@ class InvoiceDraftExportView(HomeAssistantView):
             raise web.HTTPConflict(
                 text="Hausnummer 13/14/15 nicht eindeutig aus konfigurierter Unterkunft ableitbar"
             )
+        review = draft.get("invoice_review") or {}
+        if (review.get("state") != "requested" or review.get("requested_revision") != draft["revision"]:
+            raise web.HTTPConflict(text="Bitte erst DEMO-Musterprüfung für aktuelle Revision anfordern")
         # Do not leak raw Smoobu records, access codes, messages or tokens.
         inv = draft["invoice"]
         allowed_fields = (
@@ -353,6 +409,7 @@ class InvoiceDraftExportView(HomeAssistantView):
             "source_fingerprint": draft["source_fingerprint"],
             "source_revision": draft["revision"],
             "source_changed": False,
+            "preview_request": {"state": "requested", "revision": draft["revision"]},
             "invoice": {key: inv.get(key) for key in allowed_fields},
         }
         return self.json(response)
@@ -403,7 +460,7 @@ class GuestMessageActionView(HomeAssistantView):
 
 
 def register_guest_views(hass: HomeAssistant) -> None:
-    for view in (GuestThreadsView(), GuestBookingView(), GuestDraftView(), InvoiceDraftExportView(), GuestMessageActionView()):
+    for view in (GuestThreadsView(), GuestBookingView(), GuestDraftView(), InvoiceDemoPreviewRequestView(), InvoiceDraftExportView(), GuestMessageActionView()):
         hass.http.register_view(view)
 
 
