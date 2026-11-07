@@ -212,6 +212,7 @@ def make_draft(booking: dict[str, Any]) -> dict[str, Any]:
         },
         "message": {"status": "draft", "subject": message["subject"],
                     "body": message["body"], "approved_revision": None},
+        "invoice_review": {"state": "draft", "requested_revision": None, "requested_at": None},
         "audit": [{"at": now, "event": "prepared"}],
     }
 
@@ -261,6 +262,7 @@ def revise_draft(draft: dict[str, Any], changes: dict[str, Any]) -> dict[str, An
         updated["message"]["status"] = "draft"
         updated["message"]["approved_revision"] = None
     updated["revision"] += 1
+    updated["invoice_review"] = {"state": "draft", "requested_revision": None, "requested_at": None}
     updated["updated_at"] = utc_now()
     updated["audit"].append({"at": updated["updated_at"], "event": "edited"})
     return updated
@@ -322,6 +324,42 @@ def invoice_preflight(invoice: dict[str, Any]) -> dict[str, Any]:
         "outstanding": str((total - paid).quantize(Decimal("0.01"))),
         "line_total": str(sum_lines.quantize(Decimal("0.01"))),
     }
+
+
+def request_invoice_demo_preview(draft: dict[str, Any]) -> dict[str, Any]:
+    """Request a DEMO preview, NEVER approve or issue a real invoice."""
+    from copy import deepcopy
+    updated = deepcopy(draft)
+    if updated.get("source_change_pending"):
+        raise ValueError("Buchung wurde geändert; Entwurf erneut prüfen")
+    invoice = updated["invoice"]
+    report = invoice_preflight(invoice)
+    if report["errors"]:
+        raise ValueError("Rechnungsprüfung: " + "; ".join(report["errors"]))
+    if invoice.get("payment_verified") is not True or invoice.get("payment_flow") not in (
+        "platform", "guest_invoice", "already_paid"
+    ):
+        raise ValueError("Zahlungsweg und Zahlungsstatus müssen manuell bestätigt sein")
+    if invoice.get("payment_flow") == "guest_invoice" and not invoice.get("due_date"):
+        raise ValueError("Überweisungsrechnung benötigt Zahlungsziel")
+    # These rates are only test-engine categories; final VAT determination is separate.
+    for line in invoice.get("line_items") or []:
+        try:
+            rate = Decimal(str(line.get("tax_rate")))
+        except (ValueError, InvalidOperation, TypeError) as exc:
+            raise ValueError("Steuersatz jeder Position muss bestätigt sein") from exc
+        if rate not in (Decimal("7"), Decimal("19")):
+            raise ValueError("Testengine akzeptiert derzeit nur 7 oder 19 Prozent")
+    previous = updated.get("invoice_review") or {}
+    if previous.get("state") == "requested" and previous.get("requested_revision") == updated["revision"]:
+        return updated
+    stamp = utc_now()
+    updated["invoice_review"] = {
+        "state": "requested", "requested_revision": updated["revision"],
+        "requested_at": stamp,
+    }
+    updated["audit"].append({"at": stamp, "event": "demo_invoice_preview_requested"})
+    return updated
 
 
 def approve_message(draft: dict[str, Any]) -> dict[str, Any]:
