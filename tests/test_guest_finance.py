@@ -213,7 +213,7 @@ class TestGuestDrafts(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Leistungsart"):
             mod.request_invoice_demo_preview(ready)
         changed = mod.revise_draft(ready, {"invoice": {
-            "line_items": [{"description": "Aufenthalt", "gross": "420.00", "tax_rate": "19"}],
+            "line_items": [{"description": "Miete", "gross": "420.00", "tax_rate": "7", "position_type": "rent", "quantity": 1}],
             "payment_verified": False,
         }})
         with self.assertRaisesRegex(ValueError, "Zahlungs"):
