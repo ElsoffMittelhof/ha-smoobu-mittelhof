@@ -201,7 +201,10 @@ def _get_runtime(hass: HomeAssistant):
     entries = hass.data.get(DOMAIN, {})
     if not entries:
         raise web.HTTPServiceUnavailable(text="Smoobu Integration nicht geladen")
-    return next(iter(entries.values()))
+    runtime = next(iter(entries.values()))
+    if not getattr(runtime, "guest_portal_enabled", False) or runtime.guest_drafts is None:
+        raise web.HTTPServiceUnavailable(text="Gästeverwaltung in den Integrationsoptionen noch nicht aktiviert")
+    return runtime
 
 
 def _require_admin(request: web.Request) -> None:
