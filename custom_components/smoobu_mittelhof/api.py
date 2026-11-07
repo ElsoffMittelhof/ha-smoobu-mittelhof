@@ -184,3 +184,55 @@ class SmoobuApiClient:
             if key:
                 result[str(key)] = item.get("defaultValue")
         return result
+
+
+    async def get_booking(self, booking_id: int | str) -> dict[str, Any]:
+        """Get billing context, including price elements, without modifying Smoobu."""
+        payload = await self._request(
+            "GET", f"/api/reservations/{int(booking_id)}",
+            params={"includePriceElements": "true"},
+        )
+        if not isinstance(payload, dict):
+            raise SmoobuApiError("Unexpected booking response")
+        return payload
+
+    async def get_message_threads(self, *, page_number: int = 1, page_size: int = 100) -> dict[str, Any]:
+        """Get one unified inbox page. The HTTP view filters configured properties."""
+        payload = await self._request("GET", "/api/threads", params={
+            "page_number": page_number, "page_size": min(page_size, 100),
+        })
+        if not isinstance(payload, dict):
+            raise SmoobuApiError("Unexpected message threads response")
+        return payload
+
+    async def get_booking_messages(self, booking_id: int | str) -> list[dict[str, Any]]:
+        """Fetch all pages for a single booking; never persist messages in HA entities."""
+        messages: list[dict[str, Any]] = []
+        for page in range(1, 101):
+            payload = await self._request(
+                "GET", f"/api/reservations/{int(booking_id)}/messages",
+                params={"page": page, "onlyRelatedToGuest": True},
+            )
+            if not isinstance(payload, dict):
+                raise SmoobuApiError("Unexpected messages response")
+            part = payload.get("messages", [])
+            if not isinstance(part, list):
+                raise SmoobuApiError("Invalid messages list")
+            messages.extend(item for item in part if isinstance(item, dict))
+            if page >= int(payload.get("page_count") or 1):
+                return messages
+        raise SmoobuApiError("Message conversation exceeded safe pagination limit")
+
+    async def send_message_to_guest(
+        self, booking_id: int | str, subject: str, body: str
+    ) -> dict[str, Any]:
+        """Send ONLY when explicitly called by the admin-approved guest workflow."""
+        if not body.strip():
+            raise SmoobuApiError("Cannot send empty guest message")
+        result = await self._request(
+            "POST", f"/api/reservations/{int(booking_id)}/messages/send-message-to-guest",
+            json_body={"subject": subject, "messageBody": body},
+        )
+        if not isinstance(result, dict) or int(result.get("status") or 0) not in (200, 201):
+            raise SmoobuApiError("Smoobu did not confirm successful message acceptance")
+        return result

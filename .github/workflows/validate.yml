@@ -20,6 +20,12 @@ jobs:
         run: python tests/test_isolated_workflows.py
       - name: Test IT.NRW statistics month boundaries
         run: python tests/test_statistics.py
+      - name: Test guest invoice draft revisions and payment handling
+        run: python tests/test_guest_finance.py
+      - name: Test Smoobu guest API contract offline
+        run: python tests/test_guest_api_contract.py
+      - name: Test exact house and arrival invoice number previews
+        run: python tests/test_invoice_numbers.py
 
   frontend-syntax:
     runs-on: ubuntu-latest
@@ -32,6 +38,8 @@ jobs:
         run: node --check custom_components/smoobu_mittelhof/frontend/smoobu-timeline-card.js
       - name: Check laundry card JavaScript
         run: node --check custom_components/smoobu_mittelhof/frontend/mittelhof-laundry-card.js
+      - name: Check guest card JavaScript
+        run: node --check custom_components/smoobu_mittelhof/frontend/mittelhof-guest-card.js
 
   hassfest:
     runs-on: ubuntu-latest

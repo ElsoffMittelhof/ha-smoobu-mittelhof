@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 from pathlib import Path
+import asyncio
+import logging
 
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
@@ -10,6 +12,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryError
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.event import async_track_time_interval
 
 from .api import SmoobuApiClient
 from .const import (
@@ -20,6 +23,7 @@ from .const import (
     CONF_HOUSES,
     CONF_LOOKBACK_DAYS,
     CONF_SHOW_GUEST_NAMES,
+    CONF_GUEST_MESSAGE_SEND_ENABLED,
     CONF_SMTP_HOST,
     CONF_SMTP_PASSWORD,
     CONF_SMTP_PORT,
@@ -38,6 +42,7 @@ from .const import (
     DEFAULT_SMTP_SSL,
     DEFAULT_SMTP_STARTTLS,
     DEFAULT_SMTP_USERNAME,
+    DEFAULT_GUEST_MESSAGE_SEND_ENABLED,
     DEFAULT_UPDATE_INTERVAL_MINUTES,
     DOMAIN,
     PLATFORMS,
@@ -51,6 +56,10 @@ from .services import async_register_services
 from .storage import SmoobuStateStore
 from .templates import TemplateRepository
 from .workflow import WorkflowManager
+from .guest_portal import GuestDraftRepository, register_guest_views, sync_guest_drafts
+from .invoice_portal import register_invoice_service_view
+
+_LOGGER = logging.getLogger(__name__)
 
 FRONTEND_DIR = Path(__file__).parent / "frontend"
 FRONTEND_URL = "/smoobu_mittelhof/frontend"
@@ -63,6 +72,8 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
             [StaticPathConfig(FRONTEND_URL, str(FRONTEND_DIR), False)]
         )
     await async_register_services(hass)
+    register_guest_views(hass)
+    register_invoice_service_view(hass)
     return True
 
 
@@ -167,12 +178,39 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         config_directory=config_dir,
         houses=houses,
     )
+    runtime.guest_message_send_enabled = bool(entry.options.get(
+        CONF_GUEST_MESSAGE_SEND_ENABLED, DEFAULT_GUEST_MESSAGE_SEND_ENABLED
+    ))
     runtime.workflow = WorkflowManager(hass, runtime, entry)
+    runtime.guest_drafts = GuestDraftRepository(hass)
+    await runtime.guest_drafts.async_load()
     hass.data[DOMAIN][entry.entry_id] = runtime
 
     await coordinator.async_config_entry_first_refresh()
     await runtime.workflow.async_start()
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+
+    guest_sync_lock = asyncio.Lock()
+
+    async def _safe_sync_guest_drafts() -> None:
+        if guest_sync_lock.locked():
+            return
+        async with guest_sync_lock:
+            try:
+                await sync_guest_drafts(runtime)
+            except Exception:
+                # Guest draft sync must never interrupt existing NUKI/laundry services.
+                _LOGGER.exception("Guest draft synchronization failed")
+
+    runtime.guest_unsub = coordinator.async_add_listener(
+        lambda: hass.async_create_task(_safe_sync_guest_drafts())
+    )
+    runtime.guest_timer_unsub = async_track_time_interval(
+        hass,
+        lambda _: hass.async_create_task(_safe_sync_guest_drafts()),
+        timedelta(minutes=30),
+    )
+    hass.async_create_task(_safe_sync_guest_drafts())
     return True
 
 
@@ -182,6 +220,10 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         await runtime.workflow.async_stop()
     unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unloaded:
+        if runtime and runtime.guest_unsub:
+            runtime.guest_unsub()
+        if runtime and runtime.guest_timer_unsub:
+            runtime.guest_timer_unsub()
         hass.data[DOMAIN].pop(entry.entry_id, None)
         if not hass.data[DOMAIN]:
             hass.data.pop(DOMAIN, None)

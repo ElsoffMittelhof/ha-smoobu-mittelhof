@@ -24,3 +24,7 @@ class SmoobuRuntime:
     config_directory: Path
     houses: dict[int, str]
     workflow: Any = None
+    guest_drafts: Any = None
+    guest_unsub: Any = None
+    guest_timer_unsub: Any = None
+    guest_message_send_enabled: bool = False

@@ -1,0 +1,86 @@
+name: Publish Smoobu 0.7.0rc3 prerelease package
+
+on:
+  push:
+    branches:
+      - publish/0.7.0rc3
+
+permissions:
+  contents: write
+
+concurrency:
+  group: smoobu-publish-0.7.0rc3
+  cancel-in-progress: false
+
+jobs:
+  build-verify-publish:
+    if: github.repository == 'ElsoffMittelhof/ha-smoobu-mittelhof'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch release packaging workflow
+        uses: actions/checkout@v4
+        with:
+          path: publisher
+      - name: Fetch frozen and tested RC3 source
+        uses: actions/checkout@v4
+        with:
+          ref: 63c96b4ceda8f5f2c0b632f411bb17eeec581e13
+          path: source
+          persist-credentials: false
+      - name: Verify frozen source SHA
+        run: |
+          test "$(git -C source rev-parse HEAD)" = "63c96b4ceda8f5f2c0b632f411bb17eeec581e13"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          m = json.loads(Path("source/custom_components/smoobu_mittelhof/manifest.json").read_text())
+          assert m["version"] == "0.7.0rc3" and m["domain"] == "smoobu_mittelhof"
+          PY
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Repeat critical regression tests on released exact source
+        working-directory: source
+        run: |
+          python -m compileall -q custom_components/smoobu_mittelhof
+          python tests/test_guest_finance.py
+          python tests/test_invoice_numbers.py
+          python tests/test_guest_api_contract.py
+          python tests/test_laundry_stock.py
+          python tests/test_isolated_workflows.py
+          python tests/test_statistics.py
+          node --check custom_components/smoobu_mittelhof/frontend/mittelhof-guest-card.js
+          node --check custom_components/smoobu_mittelhof/frontend/mittelhof-laundry-card.js
+          node --check custom_components/smoobu_mittelhof/frontend/smoobu-timeline-card.js
+      - name: Create reproducible manual HA installation archive
+        run: python publisher/.github/scripts/package_rc3.py source dist
+      - name: Keep install ZIP and SHA verification as GitHub Actions artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoobu-mittelhof-release-0.7.0rc3
+          path: |
+            dist/smoobu-mittelhof-0.7.0rc3.zip
+            dist/SHA256SUMS.txt
+          retention-days: 30
+          if-no-files-found: error
+      - name: Publish GitHub PRE-RELEASE (never mark latest)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG=v0.7.0rc3
+          if gh release view "$TAG" --repo ElsoffMittelhof/ha-smoobu-mittelhof >/dev/null 2>&1; then
+            echo "Release $TAG already exists. Never overwrite immutable release assets."
+          else
+            gh release create "$TAG" \
+              dist/smoobu-mittelhof-0.7.0rc3.zip \
+              dist/SHA256SUMS.txt \
+              --repo ElsoffMittelhof/ha-smoobu-mittelhof \
+              --target 63c96b4ceda8f5f2c0b632f411bb17eeec581e13 \
+              --title "Smoobu Workflow 0.7.0rc3 – DEMO-Vorabversion" \
+              --notes-file publisher/.github/RELEASE_NOTES_0.7.0rc3.md \
+              --prerelease --latest=false
+          fi
+          gh release view "$TAG" --repo ElsoffMittelhof/ha-smoobu-mittelhof --json url,tagName,isPrerelease
