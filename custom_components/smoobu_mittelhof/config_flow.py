@@ -161,10 +161,8 @@ class SmoobuOptionsFlow(OptionsFlowWithReload):
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         errors: dict[str, str] = {}
         options = dict(self.config_entry.options)
-        # Display the new operational start when upgrading a previously saved
-        # December pilot configuration, consistent with the runtime migration.
-        if options.get(CONF_LAUNDRY_TRACKING_START) == "2026-12-01":
-            options[CONF_LAUNDRY_TRACKING_START] = DEFAULT_LAUNDRY_TRACKING_START
+        # Preserve the currently configured laundry start date exactly.
+        # Never rewrite persisted operational dates merely by opening Options.
         current_houses = options.get(CONF_HOUSES, self.config_entry.data.get(CONF_HOUSES, ""))
 
         if user_input is not None:
