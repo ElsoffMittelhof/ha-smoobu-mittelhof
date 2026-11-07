@@ -26,6 +26,8 @@ jobs:
         run: python tests/test_guest_api_contract.py
       - name: Test exact house and arrival invoice number previews
         run: python tests/test_invoice_numbers.py
+      - name: Test production 0.6.8 upgrade compatibility and strict opt-in defaults
+        run: python tests/test_production_upgrade.py
 
   frontend-syntax:
     runs-on: ubuntu-latest
