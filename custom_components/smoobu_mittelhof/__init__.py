@@ -24,6 +24,7 @@ from .const import (
     CONF_LOOKBACK_DAYS,
     CONF_SHOW_GUEST_NAMES,
     CONF_GUEST_MESSAGE_SEND_ENABLED,
+    CONF_GUEST_PORTAL_ENABLED,
     CONF_SMTP_HOST,
     CONF_SMTP_PASSWORD,
     CONF_SMTP_PORT,
@@ -43,6 +44,7 @@ from .const import (
     DEFAULT_SMTP_STARTTLS,
     DEFAULT_SMTP_USERNAME,
     DEFAULT_GUEST_MESSAGE_SEND_ENABLED,
+    DEFAULT_GUEST_PORTAL_ENABLED,
     DEFAULT_UPDATE_INTERVAL_MINUTES,
     DOMAIN,
     PLATFORMS,
@@ -178,12 +180,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         config_directory=config_dir,
         houses=houses,
     )
-    runtime.guest_message_send_enabled = bool(entry.options.get(
-        CONF_GUEST_MESSAGE_SEND_ENABLED, DEFAULT_GUEST_MESSAGE_SEND_ENABLED
+    runtime.guest_portal_enabled = bool(entry.options.get(
+        CONF_GUEST_PORTAL_ENABLED, DEFAULT_GUEST_PORTAL_ENABLED
     ))
+    runtime.guest_message_send_enabled = bool(
+        runtime.guest_portal_enabled and entry.options.get(
+            CONF_GUEST_MESSAGE_SEND_ENABLED, DEFAULT_GUEST_MESSAGE_SEND_ENABLED
+        )
+    )
     runtime.workflow = WorkflowManager(hass, runtime, entry)
-    runtime.guest_drafts = GuestDraftRepository(hass)
-    await runtime.guest_drafts.async_load()
+    if runtime.guest_portal_enabled:
+        runtime.guest_drafts = GuestDraftRepository(hass)
+        await runtime.guest_drafts.async_load()
     hass.data[DOMAIN][entry.entry_id] = runtime
 
     await coordinator.async_config_entry_first_refresh()
@@ -202,15 +210,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 # Guest draft sync must never interrupt existing NUKI/laundry services.
                 _LOGGER.exception("Guest draft synchronization failed")
 
-    runtime.guest_unsub = coordinator.async_add_listener(
-        lambda: hass.async_create_task(_safe_sync_guest_drafts())
-    )
-    runtime.guest_timer_unsub = async_track_time_interval(
-        hass,
-        lambda _: hass.async_create_task(_safe_sync_guest_drafts()),
-        timedelta(minutes=30),
-    )
-    hass.async_create_task(_safe_sync_guest_drafts())
+    if runtime.guest_portal_enabled:
+        runtime.guest_unsub = coordinator.async_add_listener(
+            lambda: hass.async_create_task(_safe_sync_guest_drafts())
+        )
+        runtime.guest_timer_unsub = async_track_time_interval(
+            hass,
+            lambda _: hass.async_create_task(_safe_sync_guest_drafts()),
+            timedelta(minutes=30),
+        )
+        hass.async_create_task(_safe_sync_guest_drafts())
     return True
 
 
