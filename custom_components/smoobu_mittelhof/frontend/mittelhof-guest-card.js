@@ -62,6 +62,7 @@ class MittelhofGuestCard extends HTMLElement {
     await this._run(async () => {
       this._hasUnsaved = false;
       this._selected = await this._api("GET", "bookings/" + encodeURIComponent(id));
+      await this._syncInvoiceService();
     });
   }
 
@@ -142,6 +143,76 @@ class MittelhofGuestCard extends HTMLElement {
     });
   }
 
+  async _syncInvoiceService() {
+    this._invoiceService = null;
+    const d = this._selected?.draft;
+    if (!d || this._selected.source_changed) return;
+    const request = d.invoice_review || {};
+    if (request.state !== "requested" || request.requested_revision !== d.revision) return;
+    try {
+      const id = this._selected.booking.id;
+      this._invoiceService = await this._api(
+        "GET", "bookings/" + id + "/invoice-service/status"
+      );
+    } catch {
+      this._invoiceService = {configured: false, unavailable: true};
+    }
+  }
+
+  async _invoiceServiceAction(action) {
+    const d = this._selected?.draft;
+    if (!d || this._hasUnsaved || this._selected.source_changed) return;
+    const number = this._selected.proposed_invoice_number;
+    const payload = {revision: d.revision};
+    if (action === "approve") {
+      const phrase = "MUSTER FREIGEBEN " + number;
+      const confirmed = window.prompt(
+        "Ausschließlich diese DEMO-Mustervorschau freigeben (keine Rechnung ausstellen):\n" +
+        phrase + "\n\nBitte den gesamten Text eingeben:"
+      );
+      if (confirmed !== phrase) return;
+      payload.confirmation = confirmed;
+    } else if (action === "archive") {
+      if (!window.confirm(
+        "Nur die bereits freigegebene DEMO-Mustervorschau privat archivieren? " +
+        "Dies ist KEINE Rechnungsausstellung."
+      )) return;
+    } else if (action === "build") {
+      if (!window.confirm(
+        "Nur eine DEUTLICH als DEMO markierte ZUGFeRD-Mustervorschau erzeugen? " +
+        "Es wird KEINE echte Rechnung erstellt oder versendet."
+      )) return;
+    }
+    await this._run(async () => {
+      await this._api("POST",
+        "bookings/" + this._selected.booking.id + "/invoice-service/" + action,
+        payload);
+      await this._syncInvoiceService();
+    });
+  }
+
+  async _downloadDemoPdf() {
+    if (!this._selected || this._hasUnsaved || this._selected.source_changed) return;
+    await this._run(async () => {
+      const result = await this._api(
+        "GET", "bookings/" + this._selected.booking.id + "/invoice-service/pdf"
+      );
+      if (!result.test_only || result.invoice_issued !== false ||
+          !result.pdf_base64 || !result.filename.startsWith("DEMO-")) {
+        throw new Error("Ungültiger DEMO-PDF-Status");
+      }
+      const binary = atob(result.pdf_base64);
+      const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+      const blob = new Blob([bytes], {type: "application/pdf"});
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = result.filename;
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 30000);
+    });
+  }
+
   async _requestDemoInvoicePreview() {
     const d = this._selected?.draft;
     if (!d || this._hasUnsaved || this._selected.source_changed) return;
@@ -155,6 +226,7 @@ class MittelhofGuestCard extends HTMLElement {
         revision: d.revision
       });
       this._selected = await this._api("GET", "bookings/" + id);
+      await this._syncInvoiceService();
     });
   }
 
@@ -277,6 +349,19 @@ class MittelhofGuestCard extends HTMLElement {
         (pf.warnings || []).map((e) => '<p class="warning">Prüfen: ' + esc(e) + '</p>').join('') +
         '<p><strong>Keine Rechnungsfreigabe und kein ZUGFeRD-Versand in V1.</strong></p></div>';
     }
+    const service = this._invoiceService;
+    if (previewRequested) {
+      const serviceLabel = service?.unavailable ? 'Dienst nicht erreichbar' :
+        !service?.configured ? 'Dienst nicht konfiguriert' :
+        service.preview_created ? ('Vorhandenes Muster: ' + esc(service.review_state) +
+        (service.pdfa_validated ? ' · PDF/A geprüft' : ' · PDF/A noch offen') +
+        (service.archived ? ' · privat archiviert' : ' · nicht archiviert')) :
+        'Bereit zur DEMO-Erzeugung';
+      html += '<div class="preflight"><h4>Privater ZUGFeRD-Musterrechnungsdienst</h4>' +
+        '<p>' + serviceLabel + '</p>' +
+        '<p class="meta">Nur DEMO, keine finale Rechnungsnummer, keine Ausstellung, kein Gastversand.</p>' +
+        '</div>';
+    }
     html += '<p class="meta">ZUGFeRD-Musterprüfung: ' +
       (previewRequested ? 'für Revision ' + esc(d.revision) + ' angefordert' :
         'noch nicht angefordert bzw. nach Bearbeitung ungültig') +
@@ -321,6 +406,22 @@ class MittelhofGuestCard extends HTMLElement {
       (!selected.source_changed && selected.proposed_invoice_number &&
         previewRequested ? "" : "disabled") +
       '>Angeforderten Musterentwurf exportieren (JSON, personenbezogen)</button>' +
+      '<button data-op="demo-build" ' +
+      (previewRequested && service?.configured && !service.preview_created ? "" : "disabled") +
+      '>DEMO-ZUGFeRD-PDF erzeugen</button>' +
+      '<button data-op="demo-download" ' +
+      (previewRequested && service?.pdf_available ? "" : "disabled") +
+      '>DEMO-PDF herunterladen</button>' +
+      '<button data-op="demo-verify" ' +
+      (previewRequested && service?.preview_created && service.review_state === "pending_review" &&
+       !service.pdfa_validated ? "" : "disabled") +
+      '>PDF/A-3b unabhängig prüfen</button>' +
+      '<button data-op="demo-approve" ' +
+      (previewRequested && service?.pdfa_validated && service.review_state === "pending_review" ? "" : "disabled") +
+      '>Mustervorschau manuell freigeben</button>' +
+      '<button data-op="demo-archive" ' +
+      (previewRequested && service?.review_state === "approved_preview" && !service.archived ? "" : "disabled") +
+      '>Freigegebenes DEMO-Muster privat archivieren</button>' +
       '<button data-op="regenerate" ' +
       (msg.status === "draft" && !selected.source_changed ? "" : "disabled") +
       '>Nachricht aus Zahlungsdaten erzeugen</button>' +
@@ -371,6 +472,11 @@ class MittelhofGuestCard extends HTMLElement {
         const actions = { refresh: () => this._loadInbox(), prepare: () => this._prepare(),
           save: () => this._save(), "preview-request": () => this._requestDemoInvoicePreview(),
           "invoice-export": () => this._exportInvoiceDraft(),
+          "demo-build": () => this._invoiceServiceAction("build"),
+          "demo-verify": () => this._invoiceServiceAction("verify"),
+          "demo-approve": () => this._invoiceServiceAction("approve"),
+          "demo-archive": () => this._invoiceServiceAction("archive"),
+          "demo-download": () => this._downloadDemoPdf(),
           regenerate: () => this._action("regenerate"),
           approve: () => this._action("approve"), send: () => this._action("send") };
         if (actions[el.dataset.op]) actions[el.dataset.op]();
