@@ -17,7 +17,7 @@ from homeassistant.helpers.storage import Store
 
 from .bookings import valid_bookings
 from .const import DOMAIN
-from .guest_finance import approve_message, booking_fingerprint, make_draft, revise_draft, utc_now, invoice_preflight
+from .guest_finance import approve_message, booking_fingerprint, make_draft, revise_draft, utc_now, invoice_preflight, compose_message
 
 DRAFT_STORAGE_KEY = f"{DOMAIN}.guest_drafts"
 DRAFT_STORAGE_VERSION = 1
@@ -107,6 +107,27 @@ class GuestDraftRepository:
             if current["message"]["status"] == "approved":
                 updated["message"]["status"] = "draft"
                 updated["message"]["approved_revision"] = None
+            self._drafts[booking_id] = updated
+            await self._save()
+            return deepcopy(updated)
+
+    async def regenerate_message(self, booking_id: str, revision: int) -> dict[str, Any]:
+        """Explicitly rebuild text after manual payment edits; never sends it."""
+        async with self._lock:
+            current = self._drafts.get(booking_id)
+            if not current or current["revision"] != revision:
+                raise RuntimeError("Entwurf zwischenzeitlich geändert")
+            if current["message"]["status"] in ("sent", "sending", "delivery_unknown"):
+                raise RuntimeError("Bereits versendete oder unklare Nachricht darf nicht ersetzt werden")
+            updated = deepcopy(current)
+            text = compose_message(updated.get("booking_context") or {}, updated["invoice"])
+            updated["message"].update(
+                subject=text["subject"], body=text["body"], status="draft",
+                approved_revision=None
+            )
+            updated["revision"] += 1
+            updated["updated_at"] = utc_now()
+            updated["audit"].append({"at": utc_now(), "event": "message_regenerated"})
             self._drafts[booking_id] = updated
             await self._save()
             return deepcopy(updated)
@@ -284,7 +305,7 @@ class GuestMessageActionView(HomeAssistantView):
 
     async def post(self, request: web.Request, booking_id: str, action: str):
         _require_admin(request)
-        if action not in ("approve", "send"):
+        if action not in ("regenerate", "approve", "send"):
             raise web.HTTPNotFound()
         runtime = _get_runtime(request.app["hass"])
         if action == "send" and not runtime.guest_message_send_enabled:
@@ -302,6 +323,8 @@ class GuestMessageActionView(HomeAssistantView):
             await runtime.guest_drafts.prepare(booking)
             raise web.HTTPConflict(text="Buchung wurde geändert; Freigabe ungültig")
         try:
+            if action == "regenerate":
+                return self.json(await runtime.guest_drafts.regenerate_message(booking_id, revision))
             if action == "approve":
                 return self.json(await runtime.guest_drafts.approve(booking_id, revision))
             claimed = await runtime.guest_drafts.claim_send(booking_id, revision)
