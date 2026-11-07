@@ -119,7 +119,7 @@ class MittelhofGuestCard extends HTMLElement {
       'inputmode="decimal" value="' + esc(item.gross ?? "0.00") + '"></label>' +
       '<label>Umsatzsteuer<input value="7 % (Mittelhof-Leistung)" disabled></label>' +
       '<label>Bei Nachlass: bestätigte Rabattstaffel<input data-field="discount_rule" ' +
-      'placeholder="z. B. bestätigte 7-Nächte-Staffel" value="' +
+      'placeholder="Automatisch: 10 % ab 8 Nächten" value="' +
       esc(item.discount_rule || "") + '"></label>' +
       '<label>Bei Nachlass: Anzahl Übernachtungen<input data-field="discount_nights" ' +
       'type="number" min="1" max="365" step="1" value="' +
@@ -131,13 +131,14 @@ class MittelhofGuestCard extends HTMLElement {
   _positionEditor(invoice) {
     const rows = (invoice.line_items || []).map((item) => this._positionRow(item)).join("");
     return '<h4>Rechnungspositionen (alle 7 %)</h4>' +
-      '<p class="meta">Miete und Reinigung einmal; zusätzliche Personen und Hunde jeweils ' +
-      'maximal 2. Ein Nachlass ist negativ und braucht die bestätigte ' +
-      'Übernachtungs-Staffel. Brutto je Zeile ist der Gesamtpreis dieser Menge.</p>' +
+      '<p class="meta">Automatisch: ab 8 Übernachtungen 10 % auf die gesamte Miete ' +
+      '(nicht auf Reinigung, Person oder Hund). Bei 1–7 Nächten kein Nachlass. ' +
+      'Beim Speichern wird der Rabatt serverseitig neu berechnet und als eigene ' +
+      'negative Position ausgewiesen. Brutto je Zeile ist der Preis für die Menge.</p>' +
       '<div data-position-list>' + rows + '</div>' +
       '<button type="button" data-add-position>Position hinzufügen</button>' +
       '<button type="button" data-use-position-total>Positionssumme übernehmen</button>' +
-      '<p class="meta" data-position-total>Positionssumme wird beim Speichern geprüft.</p>';
+      '<p class="meta" data-position-total>Rabatt und Positionssumme werden beim Speichern automatisch berechnet.</p>';
   }
 
   _collectLines() {
@@ -162,18 +163,38 @@ class MittelhofGuestCard extends HTMLElement {
     });
   }
 
+  _rentalNights() {
+    const b = this._selected?.booking || {};
+    const arrival = Date.parse(String(b.arrival || "") + "T00:00:00Z");
+    const departure = Date.parse(String(b.departure || "") + "T00:00:00Z");
+    const nights = Math.round((departure - arrival) / 86400000);
+    if (!Number.isSafeInteger(nights) || nights < 1 || nights > 365)
+      throw new Error("Gültige An- und Abreise für den Mietdauernachlass fehlen");
+    return nights;
+  }
+
   _positionSumCents() {
     const rows = this._collectLines();
-    return rows.reduce((sum, item) => {
-      const value = String(item.gross).trim();
-      if (!/^-?\d+(?:\.\d{1,2})?$/.test(value)) {
-        throw new Error("Jede Position braucht einen Brutto-Betrag mit maximal zwei Dezimalstellen");
-      }
+    const cents = (value) => {
+      value = String(value).trim();
+      if (!/^-?\d+(?:\.\d{1,2})?$/.test(value))
+        throw new Error("Jede Position braucht einen centgenauen Bruttobetrag");
       const minus = value.startsWith("-") ? -1n : 1n;
       const parts = value.replace("-", "").split(".");
-      return sum + minus * (BigInt(parts[0]) * 100n +
+      return minus * (BigInt(parts[0]) * 100n +
         BigInt((parts[1] || "").padEnd(2, "0")));
-    }, 0n);
+    };
+    const rents = rows.filter((row) => row.position_type === "rent");
+    if (rents.length !== 1) {
+      return rows.reduce((sum, row) => sum + cents(row.gross), 0n);
+    }
+    const nights = this._rentalNights();
+    const rentCents = cents(rents[0].gross);
+    if (rentCents <= 0n) throw new Error("Mietbetrag muss positiv sein");
+    const discount = nights >= 8 ? (rentCents + 5n) / 10n : 0n;
+    if (nights >= 8 && discount === 0n) throw new Error("Miete zu klein für 10 % Rabatt");
+    return rows.filter((row) => row.position_type !== "stay_discount")
+      .reduce((sum, row) => sum + cents(row.gross), 0n) - discount;
   }
 
   _positionSumText() {
@@ -202,7 +223,7 @@ class MittelhofGuestCard extends HTMLElement {
     }
     const kind = window.prompt(
       "Position hinzufügen: rent (Miete), cleaning (Reinigung), " +
-      "extra_person (Zusätzliche Person), dog (Hund), stay_discount (Nachlass)"
+      "extra_person (Zusätzliche Person), dog (Hund). Der Nachlass entsteht automatisch."
     );
     const labels = {
       rent: "Miete", cleaning: "Reinigung",
