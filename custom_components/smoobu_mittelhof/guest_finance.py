@@ -367,6 +367,33 @@ def invoice_preflight(invoice: dict[str, Any]) -> dict[str, Any]:
             errors.append("Summe der Rechnungspositionen stimmt nicht mit Gesamtbetrag überein")
         if any(not line["tax_rate"] for line in lines):
             warnings.append("Steuersätze und Steuerkategorien der Positionen fachlich prüfen")
+        category_totals: dict[str, int] = {}
+        for line in lines:
+            kind = line.get("position_type") or ""
+            if kind not in POSITION_NAMES:
+                errors.append("Leistungsart einer Position nicht ausgewählt")
+                continue
+            category_totals[kind] = category_totals.get(kind, 0) + line.get("quantity", 1)
+            try:
+                rate = Decimal(line.get("tax_rate") or "")
+            except (InvalidOperation, TypeError):
+                errors.append("7-%-Steuersatz einer Position fehlt")
+            else:
+                if rate != Decimal("7"):
+                    errors.append("Nur 7 % für Mittelhof-Leistungsarten zulässig")
+            if kind == "stay_discount":
+                if Decimal(line["gross"]) >= 0:
+                    errors.append("Mietdauernachlass muss negativ sein")
+                if len(str(line.get("discount_rule") or "").strip()) < 8:
+                    errors.append("Mietdauernachlass: bestätigte Rabattstaffel fehlt")
+            elif Decimal(line["gross"]) <= 0:
+                errors.append("Mittelhof-Leistung muss einen positiven Bruttobetrag haben")
+        if category_totals.get("rent", 0) != 1:
+            errors.append("Genau eine Mietposition erforderlich")
+        for kind, count in category_totals.items():
+            if count > POSITION_LIMITS[kind]:
+                errors.append(POSITION_NAMES[kind] + ": Höchstmenge überschritten")
+
         if any(Decimal(line["gross"]) < 0 for line in lines):
             warnings.append("Rabattpositionen vor EN16931-Export als korrekte Abschläge modellieren")
     except (ValueError, KeyError, TypeError, InvalidOperation):
