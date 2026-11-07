@@ -58,7 +58,13 @@ class GuestDraftRepository:
                 for key, d in self._drafts.items()
             ]
 
-    async def prepare(self, booking: dict[str, Any]) -> dict[str, Any]:
+    async def prepare(
+        self, booking: dict[str, Any], *, acknowledge_source: bool = False
+    ) -> dict[str, Any]:
+        """Automated sync only marks discrepancies; admin acknowledgement clears them.
+
+        Previous manual edits are never replaced by a fresh Smoobu price.
+        """
         key = str(booking["id"])
         fingerprint = booking_fingerprint(booking)
         async with self._lock:
@@ -67,17 +73,24 @@ class GuestDraftRepository:
                 self._drafts[key] = make_draft(booking)
                 await self._save()
             elif existing["source_fingerprint"] != fingerprint:
-                # Retain edits; never overwrite user work. Invalidate any approval.
-                existing["source_fingerprint"] = fingerprint
-                existing["source_channel"] = make_draft(booking)["source_channel"]
-                existing["revision"] += 1
-                existing["updated_at"] = utc_now()
-                if existing["message"]["status"] not in ("sent", "sending", "delivery_unknown"):
-                    existing["message"]["status"] = "draft"
-                    existing["message"]["approved_revision"] = None
-                existing["invoice"]["status"] = "draft"
-                existing["audit"].append({"at": utc_now(), "event": "booking_changed_needs_review"})
-                await self._save()
+                if not existing.get("source_change_pending"):
+                    existing["source_change_pending"] = True
+                    existing["revision"] += 1
+                    existing["updated_at"] = utc_now()
+                    if existing["message"]["status"] not in ("sent", "sending", "delivery_unknown"):
+                        existing["message"]["status"] = "draft"
+                        existing["message"]["approved_revision"] = None
+                    existing["invoice"]["status"] = "draft"
+                    existing["audit"].append({"at": utc_now(), "event": "booking_changed_needs_review"})
+                    await self._save()
+                if acknowledge_source:
+                    existing["source_fingerprint"] = fingerprint
+                    existing["source_channel"] = make_draft(booking)["source_channel"]
+                    existing["source_change_pending"] = False
+                    existing["revision"] += 1
+                    existing["updated_at"] = utc_now()
+                    existing["audit"].append({"at": utc_now(), "event": "source_change_acknowledged"})
+                    await self._save()
             return deepcopy(self._drafts[key])
 
     async def revise(self, booking_id: str, revision: int, changes: dict[str, Any]) -> dict[str, Any]:
@@ -231,7 +244,7 @@ class GuestBookingView(HomeAssistantView):
             "messages": messages,
             "draft": draft,
             "invoice_preflight": invoice_preflight(draft["invoice"]) if draft else None,
-            "source_changed": bool(draft and draft["source_fingerprint"] != booking_fingerprint(booking)),
+            "source_changed": bool(draft and (draft.get("source_change_pending") or draft["source_fingerprint"] != booking_fingerprint(booking))),
         })
 
 
@@ -244,7 +257,7 @@ class GuestDraftView(HomeAssistantView):
         _require_admin(request)
         runtime = _get_runtime(request.app["hass"])
         booking = await _checked_booking(runtime, booking_id)
-        return self.json(await runtime.guest_drafts.prepare(booking))
+        return self.json(await runtime.guest_drafts.prepare(booking, acknowledge_source=True))
 
     async def patch(self, request: web.Request, booking_id: str):
         _require_admin(request)
