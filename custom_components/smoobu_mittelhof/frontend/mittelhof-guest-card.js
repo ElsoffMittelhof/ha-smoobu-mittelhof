@@ -120,13 +120,15 @@ class MittelhofGuestCard extends HTMLElement {
     if (!d) return;
     let changes;
     try {
-      changes = {
-        invoice: this._collectInvoice(),
-        message: {
+      changes = {invoice: this._collectInvoice()};
+      // A delivered guest message is immutable. Never send a message patch
+      // when only accounting fields are being edited after delivery.
+      if (!["sent", "sending", "delivery_unknown"].includes(d.message.status)) {
+        changes.message = {
           subject: this.shadowRoot.querySelector('[data-field="subject"]').value,
           body: this.shadowRoot.querySelector('[data-field="body"]').value
-        }
-      };
+        };
+      }
     } catch (err) {
       this._error = "Rechnungspositionen sind kein gültiges JSON: " + String(err.message || err);
       window.alert("Änderungen NICHT gespeichert: " + this._error);
