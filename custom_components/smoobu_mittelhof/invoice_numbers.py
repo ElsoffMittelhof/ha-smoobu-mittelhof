@@ -7,7 +7,7 @@ from __future__ import annotations
 from datetime import date
 import re
 
-_PREFIX = re.compile(r"^(?:Mittelhof\s+)?(?:Ferienhaus|Haus|FH)\s*(13|14|15)(?:\s*[-–:]\s*.*)?$", re.IGNORECASE)
+_PREFIX = re.compile(r"^(?:Mittelhof\s+)?(?:Ferienhaus|Ferienwohnung|Wohnung|Apartment|Haus|FH)\s*(13|14|15)(?:\s*[-–:]\s*.*)?$", re.IGNORECASE)
 _BARE = re.compile(r"^(13|14|15)$")
 
 
