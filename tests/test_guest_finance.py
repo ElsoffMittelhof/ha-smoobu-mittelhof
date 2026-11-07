@@ -108,6 +108,19 @@ class TestGuestDrafts(unittest.TestCase):
         d = mod.make_draft(b)
         self.assertEqual(len(d["invoice"]["line_items"]), 2)
 
+    def test_negative_discount_is_preserved(self):
+        b = booking()
+        b["priceElements"] = [
+            {"name": "Aufenthalt", "amount": 450, "priceIncludedInId": None},
+            {"name": "Rabatt", "amount": -30, "priceIncludedInId": None},
+        ]
+        d = mod.make_draft(b)
+        self.assertEqual(d["invoice"]["line_items"][1]["gross"], "-30.00")
+        changed = mod.revise_draft(d, {"invoice": {"line_items": [
+            {"description": "Rabatt", "gross": "-30.00", "tax_rate": ""}
+        ]}})
+        self.assertEqual(changed["invoice"]["line_items"][0]["gross"], "-30.00")
+
     def test_missing_reservation_id_fails(self):
         b = booking()
         b["id"] = None
