@@ -267,7 +267,7 @@ class MittelhofGuestCard extends HTMLElement {
         };
       }
     } catch (err) {
-      this._error = "Rechnungspositionen sind kein gültiges JSON: " + String(err.message || err);
+      this._error = "Rechnungspositionen prüfen: " + String(err.message || err);
       window.alert("Änderungen NICHT gespeichert: " + this._error);
       return;
     }
@@ -439,7 +439,11 @@ class MittelhofGuestCard extends HTMLElement {
   _renderInvoicePreview(invoice, preflight) {
     const esc = MittelhofGuestCard.esc;
     const lines = Array.isArray(invoice.line_items) ? invoice.line_items : [];
-    const entries = lines.map((line) => '<tr><td>' + esc(line.description || '') +
+    const entries = lines.map((line) => '<tr><td>' +
+      esc(line.description || '') +
+      (line.quantity && line.quantity > 1 ? ' (' + esc(line.quantity) + ' ×)' : '') +
+      (line.position_type === "stay_discount" && line.discount_nights ?
+        ' · ' + esc(line.discount_nights) + ' Nächte' : '') +
       '</td><td>' + esc(line.tax_rate || 'offen') +
       '</td><td class="money">' + esc(line.gross || '0.00') + ' €</td></tr>').join('');
     const outstanding = preflight ? preflight.outstanding : '—';
