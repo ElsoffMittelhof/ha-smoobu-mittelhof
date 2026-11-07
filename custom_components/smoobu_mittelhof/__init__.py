@@ -57,6 +57,7 @@ from .storage import SmoobuStateStore
 from .templates import TemplateRepository
 from .workflow import WorkflowManager
 from .guest_portal import GuestDraftRepository, register_guest_views, sync_guest_drafts
+from .invoice_portal import register_invoice_service_view
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -72,6 +73,7 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
         )
     await async_register_services(hass)
     register_guest_views(hass)
+    register_invoice_service_view(hass)
     return True
 
 
