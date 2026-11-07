@@ -14,6 +14,7 @@ from typing import Any
 FINGERPRINT_FIELDS = (
     "id", "arrival", "departure", "channel", "guest-name", "email",
     "price", "price-paid", "prepayment", "prepayment-paid", "deposit",
+    "modifiedAt", "price-details", "city-tax", "commission-included",
     "deposit-paid", "type", "is-blocked-booking",
 )
 PAYMENT_FLOWS = {"unverified", "platform", "guest_invoice", "already_paid"}
@@ -204,6 +205,62 @@ def revise_draft(draft: dict[str, Any], changes: dict[str, Any]) -> dict[str, An
     updated["updated_at"] = utc_now()
     updated["audit"].append({"at": updated["updated_at"], "event": "edited"})
     return updated
+
+
+def invoice_preflight(invoice: dict[str, Any]) -> dict[str, Any]:
+    """Read-only invoice consistency report; deliberately NEVER issues an invoice.
+
+    Validating the EN16931 payload and seller taxation is a separate mandatory step.
+    """
+    errors: list[str] = []
+    warnings: list[str] = []
+    if not str(invoice.get("recipient_name") or "").strip():
+        errors.append("Rechnungsempfänger fehlt")
+    if not str(invoice.get("recipient_address") or "").strip():
+        errors.append("Rechnungsanschrift fehlt")
+    try:
+        total = Decimal(decimal_money(invoice.get("total_gross")))
+        paid = Decimal(decimal_money(invoice.get("paid_amount")))
+        if total <= 0:
+            errors.append("Rechnungsbetrag muss größer als null sein")
+        if paid > total:
+            errors.append("Bereits bezahlt übersteigt Rechnungsbetrag")
+    except ValueError:
+        errors.append("Rechnungsbeträge sind ungültig")
+        total, paid = Decimal("0"), Decimal("0")
+    try:
+        lines = normalize_lines(invoice.get("line_items"))
+        if not lines:
+            errors.append("Es fehlen Rechnungspositionen")
+        sum_lines = sum((Decimal(line["gross"]) for line in lines), Decimal("0"))
+        if sum_lines != total:
+            errors.append("Summe der Rechnungspositionen stimmt nicht mit Gesamtbetrag überein")
+        if any(not line["tax_rate"] for line in lines):
+            warnings.append("Steuersätze und Steuerkategorien der Positionen fachlich prüfen")
+        if any(Decimal(line["gross"]) < 0 for line in lines):
+            warnings.append("Rabattpositionen vor EN16931-Export als korrekte Abschläge modellieren")
+    except (ValueError, KeyError, TypeError, InvalidOperation):
+        errors.append("Rechnungspositionen sind ungültig")
+        sum_lines = Decimal("0")
+    flow = invoice.get("payment_flow")
+    if flow == "unverified" or flow not in PAYMENT_FLOWS:
+        warnings.append("Zahlungsweg nicht verifiziert")
+    if flow in ("platform", "already_paid") and not invoice.get("payment_verified"):
+        warnings.append("Zahlungsstatus der Plattform nicht bestätigt")
+    if flow == "guest_invoice" and not invoice.get("due_date"):
+        warnings.append("Zahlungsziel für Überweisungsrechnung fehlt")
+    if not invoice.get("payment_verified") and paid > 0:
+        warnings.append("Bezahlter Betrag wurde noch nicht bestätigt")
+    warnings.append("Absenderdaten, Steuerverfahren, Leistungszeitraum und ZUGFeRD-XML noch nicht validiert")
+    return {
+        "ready_for_issuance": False,  # no issuance backend or authoritative tax validation in V1
+        "errors": errors,
+        "warnings": warnings,
+        "gross": str(total.quantize(Decimal("0.01"))),
+        "paid": str(paid.quantize(Decimal("0.01"))),
+        "outstanding": str((total - paid).quantize(Decimal("0.01"))),
+        "line_total": str(sum_lines.quantize(Decimal("0.01"))),
+    }
 
 
 def approve_message(draft: dict[str, Any]) -> dict[str, Any]:
