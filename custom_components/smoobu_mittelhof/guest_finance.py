@@ -40,6 +40,17 @@ def decimal_money(value: Any) -> str:
     return str(amount.quantize(Decimal("0.01")))
 
 
+def signed_line_money(value: Any) -> str:
+    """Price elements can contain negative discounts; never round silently."""
+    try:
+        amount = Decimal(str(value))
+    except (TypeError, ValueError, InvalidOperation) as err:
+        raise ValueError("Ungültiger Positionsbetrag") from err
+    if not amount.is_finite() or amount.as_tuple().exponent < -2:
+        raise ValueError("Positionsbetrag muss auf Cent genau sein")
+    return str(amount.quantize(Decimal("0.01")))
+
+
 def channel_name(booking: dict[str, Any]) -> str:
     channel = booking.get("channel")
     return str(channel.get("name") or "") if isinstance(channel, dict) else str(channel or "")
@@ -78,7 +89,7 @@ def normalize_lines(raw: Any) -> list[dict[str, str]]:
             raise ValueError("Positionsbezeichnung fehlt oder ist zu lang")
         lines.append({
             "description": label,
-            "gross": decimal_money(item.get("gross", "0.00")),
+            "gross": signed_line_money(item.get("gross", "0.00")),
             "tax_rate": str(item.get("tax_rate") or "").strip(),  # empty = unresolved
         })
     return lines
@@ -110,7 +121,7 @@ def make_draft(booking: dict[str, Any]) -> dict[str, Any]:
                 continue
             lines.append({
                 "description": str(element.get("name") or element.get("type") or "Leistung")[:250],
-                "gross": decimal_money(element.get("amount") or 0),
+                "gross": signed_line_money(element.get("amount") or 0),
                 "tax_rate": "",
             })
     if not lines:
