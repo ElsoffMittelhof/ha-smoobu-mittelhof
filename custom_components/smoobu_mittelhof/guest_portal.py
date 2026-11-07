@@ -18,6 +18,7 @@ from homeassistant.helpers.storage import Store
 from .bookings import valid_bookings
 from .const import DOMAIN
 from .guest_finance import approve_message, booking_fingerprint, make_draft, revise_draft, utc_now, invoice_preflight, compose_message
+from .invoice_numbers import planned_number, house_from_label
 
 DRAFT_STORAGE_KEY = f"{DOMAIN}.guest_drafts"
 DRAFT_STORAGE_VERSION = 1
@@ -268,6 +269,10 @@ class GuestBookingView(HomeAssistantView):
             "messages": messages,
             "draft": draft,
             "invoice_preflight": invoice_preflight(draft["invoice"]) if draft else None,
+            "proposed_invoice_number": planned_number(
+                runtime.houses.get(int((booking.get("apartment") or {}).get("id") or 0), ""),
+                str(booking.get("arrival") or ""),
+            ),
             "source_changed": bool(draft and (draft.get("source_change_pending") or draft["source_fingerprint"] != booking_fingerprint(booking))),
         })
 
@@ -299,6 +304,58 @@ class GuestDraftView(HomeAssistantView):
             raise web.HTTPBadRequest(text=str(exc)) from exc
         except (RuntimeError, LookupError) as exc:
             raise web.HTTPConflict(text=str(exc)) from exc
+
+
+class InvoiceDraftExportView(HomeAssistantView):
+    """Read-only authenticated export for the SEPARATE PRIVATE invoice test engine.
+
+    This endpoint cannot assign an invoice number or issue/send an invoice.
+    """
+    url = "/api/smoobu_mittelhof/guest/v1/bookings/{booking_id}/invoice-export"
+    name = "api:smoobu_mittelhof:invoice_export"
+    requires_auth = True
+
+    async def get(self, request: web.Request, booking_id: str):
+        _require_admin(request)
+        runtime = _get_runtime(request.app["hass"])
+        booking = await _checked_booking(runtime, booking_id)
+        draft = await runtime.guest_drafts.get(booking_id)
+        if draft is None:
+            raise web.HTTPConflict(text="Bitte zuerst einen Rechnungsentwurf vorbereiten")
+        if (draft.get("source_change_pending") or
+                draft["source_fingerprint"] != booking_fingerprint(booking)):
+            await runtime.guest_drafts.prepare(booking)
+            raise web.HTTPConflict(text="Buchungsdaten seit Entwurf verändert")
+        apartment = booking.get("apartment") or {}
+        apartment_id = int(apartment.get("id") or 0)
+        label = runtime.houses.get(apartment_id, "")
+        proposal = planned_number(label, str(booking.get("arrival") or ""))
+        if not proposal:
+            raise web.HTTPConflict(
+                text="Hausnummer 13/14/15 nicht eindeutig aus konfigurierter Unterkunft ableitbar"
+            )
+        # Do not leak raw Smoobu records, access codes, messages or tokens.
+        inv = draft["invoice"]
+        allowed_fields = (
+            "recipient_name", "recipient_street", "recipient_postal_code",
+            "recipient_city", "recipient_country", "description", "total_gross",
+            "paid_amount", "payment_flow", "payment_verified", "payment_note",
+            "tax_note", "due_date", "line_items",
+        )
+        response = {
+            "schema_version": "mittelhof.invoice-draft.v1",
+            "booking_id": str(booking_id),
+            "apartment_id": apartment_id,
+            "house_number": house_from_label(label),
+            "arrival": str(booking.get("arrival") or ""),
+            "departure": str(booking.get("departure") or ""),
+            "proposed_invoice_number": proposal,
+            "source_fingerprint": draft["source_fingerprint"],
+            "source_revision": draft["revision"],
+            "source_changed": False,
+            "invoice": {key: inv.get(key) for key in allowed_fields},
+        }
+        return self.json(response)
 
 
 class GuestMessageActionView(HomeAssistantView):
@@ -346,7 +403,7 @@ class GuestMessageActionView(HomeAssistantView):
 
 
 def register_guest_views(hass: HomeAssistant) -> None:
-    for view in (GuestThreadsView(), GuestBookingView(), GuestDraftView(), GuestMessageActionView()):
+    for view in (GuestThreadsView(), GuestBookingView(), GuestDraftView(), InvoiceDraftExportView(), GuestMessageActionView()):
         hass.http.register_view(view)
 
 
