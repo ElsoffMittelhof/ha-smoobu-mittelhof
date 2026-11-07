@@ -172,6 +172,12 @@ class MittelhofGuestCard extends HTMLElement {
       );
       if (confirmed !== phrase) return;
       payload.confirmation = confirmed;
+    } else if (action === "correction") {
+      const reason = window.prompt(
+        "Korrekturbegründung für die bisherige Musterfassung (10 bis 500 Zeichen):"
+      );
+      if (reason === null || reason.trim().length < 10 || reason.length > 500) return;
+      payload.reason = reason.trim();
     } else if (action === "archive") {
       if (!window.confirm(
         "Nur die bereits freigegebene DEMO-Mustervorschau privat archivieren? " +
@@ -422,6 +428,9 @@ class MittelhofGuestCard extends HTMLElement {
       '<button data-op="demo-archive" ' +
       (previewRequested && service?.review_state === "approved_preview" && !service.archived ? "" : "disabled") +
       '>Freigegebenes DEMO-Muster privat archivieren</button>' +
+      '<button data-op="demo-correction" ' +
+      (previewRequested && service?.review_state === "approved_preview" ? "" : "disabled") +
+      '>Musterkorrektur begründet anfordern</button>' +
       '<button data-op="regenerate" ' +
       (msg.status === "draft" && !selected.source_changed ? "" : "disabled") +
       '>Nachricht aus Zahlungsdaten erzeugen</button>' +
@@ -476,6 +485,7 @@ class MittelhofGuestCard extends HTMLElement {
           "demo-verify": () => this._invoiceServiceAction("verify"),
           "demo-approve": () => this._invoiceServiceAction("approve"),
           "demo-archive": () => this._invoiceServiceAction("archive"),
+          "demo-correction": () => this._invoiceServiceAction("correction"),
           "demo-download": () => this._downloadDemoPdf(),
           regenerate: () => this._action("regenerate"),
           approve: () => this._action("approve"), send: () => this._action("send") };
