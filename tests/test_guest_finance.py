@@ -219,6 +219,17 @@ class TestGuestDrafts(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Zahlungs"):
             mod.request_invoice_demo_preview(changed)
 
+    def test_sent_message_stays_immutable_while_invoice_changes(self):
+        draft = mod.make_draft(booking())
+        draft["message"]["status"] = "sent"
+        sent_subject = draft["message"]["subject"]
+        revised = mod.revise_draft(draft, {"invoice": {"recipient_city": "Neue Stadt"}})
+        self.assertEqual(revised["message"]["status"], "sent")
+        self.assertEqual(revised["message"]["subject"], sent_subject)
+        self.assertEqual(revised["invoice"]["recipient_city"], "Neue Stadt")
+        with self.assertRaises(ValueError):
+            mod.revise_draft(revised, {"message": {"body": "Darf nicht geändert werden"}})
+
     def test_missing_reservation_id_fails(self):
         b = booking()
         b["id"] = None
