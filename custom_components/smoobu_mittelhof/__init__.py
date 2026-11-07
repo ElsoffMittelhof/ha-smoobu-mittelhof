@@ -20,6 +20,7 @@ from .const import (
     CONF_HOUSES,
     CONF_LOOKBACK_DAYS,
     CONF_SHOW_GUEST_NAMES,
+    CONF_GUEST_MESSAGE_SEND_ENABLED,
     CONF_SMTP_HOST,
     CONF_SMTP_PASSWORD,
     CONF_SMTP_PORT,
@@ -38,6 +39,7 @@ from .const import (
     DEFAULT_SMTP_SSL,
     DEFAULT_SMTP_STARTTLS,
     DEFAULT_SMTP_USERNAME,
+    DEFAULT_GUEST_MESSAGE_SEND_ENABLED,
     DEFAULT_UPDATE_INTERVAL_MINUTES,
     DOMAIN,
     PLATFORMS,
@@ -169,6 +171,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         config_directory=config_dir,
         houses=houses,
     )
+    runtime.guest_message_send_enabled = bool(entry.options.get(
+        CONF_GUEST_MESSAGE_SEND_ENABLED, DEFAULT_GUEST_MESSAGE_SEND_ENABLED
+    ))
     runtime.workflow = WorkflowManager(hass, runtime, entry)
     runtime.guest_drafts = GuestDraftRepository(hass)
     await runtime.guest_drafts.async_load()
