@@ -19,7 +19,9 @@ FINGERPRINT_FIELDS = (
 )
 PAYMENT_FLOWS = {"unverified", "platform", "guest_invoice", "already_paid"}
 INVOICE_EDITABLE = {
-    "recipient_name", "recipient_address", "description", "total_gross",
+    "recipient_name", "recipient_address", "recipient_street",
+    "recipient_postal_code", "recipient_city", "recipient_country",
+    "description", "total_gross",
     "paid_amount", "due_date", "payment_flow", "payment_note", "tax_note",
     "line_items", "payment_verified",
 }
@@ -193,6 +195,10 @@ def make_draft(booking: dict[str, Any]) -> dict[str, Any]:
             "status": "draft",
             "recipient_name": guest,
             "recipient_address": "",
+            "recipient_street": "",
+            "recipient_postal_code": "",
+            "recipient_city": "",
+            "recipient_country": "",
             "description": f"Übernachtung {house}, {arrival}–{departure}",
             "total_gross": amount,
             "paid_amount": "0.00",  # never infer paid from channel
@@ -269,8 +275,10 @@ def invoice_preflight(invoice: dict[str, Any]) -> dict[str, Any]:
     warnings: list[str] = []
     if not str(invoice.get("recipient_name") or "").strip():
         errors.append("Rechnungsempfänger fehlt")
-    if not str(invoice.get("recipient_address") or "").strip():
-        errors.append("Rechnungsanschrift fehlt")
+    if not str(invoice.get("recipient_street") or "").strip() or not str(invoice.get("recipient_city") or "").strip() or not str(invoice.get("recipient_postal_code") or "").strip():
+        errors.append("Strukturierte Rechnungsanschrift fehlt")
+    if len(str(invoice.get("recipient_country") or "")) != 2:
+        errors.append("ISO-Ländercode für Rechnungsempfänger fehlt")
     try:
         total = Decimal(decimal_money(invoice.get("total_gross")))
         paid = Decimal(decimal_money(invoice.get("paid_amount")))
