@@ -3,7 +3,7 @@ name: Publish Smoobu 0.7.0 STABLE production-safe integration
 on:
   push:
     branches:
-      - publish/0.7.0
+      - publish/0.7.0-production
 
 permissions:
   contents: write
