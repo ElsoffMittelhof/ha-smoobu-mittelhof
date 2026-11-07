@@ -30,7 +30,7 @@ EXPORT_FIELDS = (
     "paid_amount", "payment_flow", "payment_verified", "payment_note",
     "tax_note", "due_date", "line_items",
 )
-ALLOWED_ACTIONS = {"build", "verify", "approve", "archive"}
+ALLOWED_ACTIONS = {"build", "verify", "approve", "archive", "correction"}
 MAX_PDF_BYTES = 5_000_000
 MAX_RESPONSE_BYTES = 100_000
 
@@ -216,6 +216,11 @@ class InvoiceServiceView(HomeAssistantView):
                 user = request.get("hass_user")
                 payload["reviewer"] = str(user.name or user.id)
                 payload["confirmation"] = str(body.get("confirmation") or "")
+            if action == "correction":
+                reason = body.get("reason")
+                if not isinstance(reason, str) or not 10 <= len(reason.strip()) <= 500:
+                    raise web.HTTPBadRequest(text="Korrekturbegründung mit 10–500 Zeichen erforderlich")
+                payload["reason"] = reason.strip()
             state = await _service_request(request.app["hass"], cfg, "POST", uri, payload)
         if state is None:
             raise web.HTTPBadGateway(text="Privater Musterrechnungsdienst lieferte keine Antwort")
