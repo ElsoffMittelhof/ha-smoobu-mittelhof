@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.7.0 — 2026-11-07
+
+- Stable, backward-compatible Smoobu Workflow update from v0.6.8 for existing Mittelhof Home Assistant installations. The domain `smoobu_mittelhof`, platform entities and existing NUKI/laundry/IT.NRW workflows remain unchanged.
+- New **opt-in** administrator guest inbox, booking-specific Smoobu conversations, manually editable guest-message and invoice drafts. Guest PII syncing/HA Store initialization is DISABLED until `guest_portal_enabled` is explicitly enabled in the integration's options.
+- New **guest message sending is OFF by default**, independent of opt-in to the inbox. Sending requires a distinct option and explicit per-message admin approval.
+- Fixed options-flow defaults to show the actual saved configuration for existing laundry/NUKI/SMTP settings and the existing custom config directory, preventing accidental reset when enabling the new guest inbox.
+- Draft invoice preview: 10-digit planned number `<house><arrival YYYYMMDD>` for houses 13, 14 and 15; 7% on classified accommodation services (rent, cleaning, max. 2 extra persons, max. 2 dogs). From **8 nights**, 10% discount on total gross rent only (not extras), rounded to cents. Unclassified Smoobu items cannot be auto-assigned or discounted.
+- Optional admin-only connector to an independently installed PRIVATE ZUGFeRD **DEMO-only** preview service. Not installed with HACS. Final invoice issuance, payment collection, invoice emails and GoBD archiving are NOT provided or activated by this release.
+- Separate Lovelace guest card included. Existing `dashboards/mittelhof.yaml` and all five views remain unchanged. New card is not added to existing dashboards automatically.
+- New production-upgrade checks plus existing Python/JS, HACS, hassfest, NUKI, laundry, invoice and statistics regression tests.
+- Safe migration/backout instructions: `docs/release-0.7.0-production.md`. Take a full HA backup before updating. This release was CI-verified but **has not been installed or runtime-tested on the user's live HA instance**.
+
 ## 0.6.8 — 2026-11-02
 
 - Add standalone `smoobu_mittelhof.process_nuki_only` and `smoobu_mittelhof.process_laundry_only` services with optional `force_notify` flag. A manual NUKI request will never process laundry/order status or send a laundry notification, and a laundry request will never process NUKI.
