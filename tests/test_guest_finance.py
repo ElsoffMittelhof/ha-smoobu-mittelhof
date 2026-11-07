@@ -281,8 +281,10 @@ class TestGuestDrafts(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Pflicht"):
             mod.validate_mittelhof_positions(lines, "2027-01-10", "2027-01-18")
         expanded, _ = mod.apply_duration_discount(lines, "2027-01-10", "2027-01-18")
+        early_discount = [dict(item) for item in expanded]
+        early_discount[-1]["discount_nights"] = 7
         with self.assertRaisesRegex(ValueError, "Vor der 8"):
-            mod.validate_mittelhof_positions(expanded, "2027-01-10", "2027-01-17")
+            mod.validate_mittelhof_positions(early_discount, "2027-01-10", "2027-01-17")
         invalid = [dict(x) for x in expanded]
         invalid[-1]["discount_rule"] = "Nicht die bestätigte Rabattregel"
         with self.assertRaisesRegex(ValueError, "bestätigte Regel"):
