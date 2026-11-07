@@ -17,7 +17,7 @@ from homeassistant.helpers.storage import Store
 
 from .bookings import valid_bookings
 from .const import DOMAIN
-from .guest_finance import approve_message, booking_fingerprint, make_draft, revise_draft, utc_now
+from .guest_finance import approve_message, booking_fingerprint, make_draft, revise_draft, utc_now, invoice_preflight
 
 DRAFT_STORAGE_KEY = f"{DOMAIN}.guest_drafts"
 DRAFT_STORAGE_VERSION = 1
@@ -230,6 +230,7 @@ class GuestBookingView(HomeAssistantView):
             },
             "messages": messages,
             "draft": draft,
+            "invoice_preflight": invoice_preflight(draft["invoice"]) if draft else None,
             "source_changed": bool(draft and draft["source_fingerprint"] != booking_fingerprint(booking)),
         })
 
