@@ -6,7 +6,7 @@ All money is stored as decimal strings to avoid float rounding.
 from __future__ import annotations
 
 from datetime import date, datetime, timezone
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 import hashlib
 import json
 from typing import Any
@@ -34,6 +34,9 @@ POSITION_NAMES = {
     "stay_discount": "Nachlass aufgrund der Mietdauer",
 }
 POSITION_LIMITS = {"rent": 1, "cleaning": 1, "extra_person": 2, "dog": 2, "stay_discount": 1}
+DISCOUNT_MIN_NIGHTS = 8
+DISCOUNT_FACTOR = Decimal("0.10")
+DISCOUNT_RULE = "10 % Mietdauernachlass ab 8 Übernachtungen auf die gesamte Miete"
 
 
 
@@ -126,17 +129,64 @@ def normalize_lines(raw: Any) -> list[dict[str, Any]]:
     return lines
 
 
+def stay_nights(arrival: str, departure: str) -> int:
+    try:
+        nights = (date.fromisoformat(departure) - date.fromisoformat(arrival)).days
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Aufenthaltsdaten für Mietdauerrabatt fehlen") from exc
+    if not 1 <= nights <= 365:
+        raise ValueError("Aufenthaltsdauer außerhalb von 1 bis 365 Nächten")
+    return nights
+
+
+def expected_discount(rent_gross: Any, nights: int) -> Decimal:
+    rent = Decimal(decimal_money(rent_gross))
+    if rent <= 0:
+        raise ValueError("Mietbetrag muss positiv sein")
+    if nights < DISCOUNT_MIN_NIGHTS:
+        return Decimal("0.00")
+    discount = (rent * DISCOUNT_FACTOR).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    if discount <= 0:
+        raise ValueError("Mietbetrag für 10-%-Cent-Rabatt zu klein")
+    return -discount
+
+
+def apply_duration_discount(lines: Any, arrival: str, departure: str) -> tuple[list[dict[str, Any]], str]:
+    """Canonicalize stay discount on saving a manually categorized rent.
+
+    Never infer categories from Smoobu. The operator must first classify exactly
+    one rent item. Rebuilds rather than stacks existing discount lines.
+    """
+    current = normalize_lines(lines)
+    rent = [row for row in current if row["position_type"] == "rent"]
+    if len(rent) != 1:
+        return current, str(sum((Decimal(x["gross"]) for x in current),
+                                Decimal("0.00")).quantize(Decimal("0.01")))
+    nights = stay_nights(arrival, departure)
+    discount = expected_discount(rent[0]["gross"], nights)
+    clean = [row for row in current if row["position_type"] != "stay_discount"]
+    if discount:
+        clean.append({
+            "position_type": "stay_discount",
+            "description": "10 % Mietdauernachlass ab 8 Nächten",
+            "quantity": 1,
+            "gross": str(discount),
+            "tax_rate": "7",
+            "discount_nights": nights,
+            "discount_rule": DISCOUNT_RULE,
+        })
+    total = sum((Decimal(row["gross"]) for row in clean), Decimal("0.00"))
+    if total <= 0:
+        raise ValueError("Rechnungsbrutto nach Nachlass muss positiv sein")
+    return clean, str(total.quantize(Decimal("0.01")))
+
+
 def validate_mittelhof_positions(lines: Any, arrival: str, departure: str) -> None:
     """Only the five operator-defined categories, 7% and confirmed discount."""
     normalized = normalize_lines(lines)
     if not normalized or len(normalized) > 20:
         raise ValueError("Mindestens eine und maximal 20 Mittelhof-Positionen erforderlich")
-    try:
-        nights = (date.fromisoformat(departure) - date.fromisoformat(arrival)).days
-    except (ValueError, TypeError) as exc:
-        raise ValueError("Aufenthaltsdaten für Mietdauerrabatt fehlen") from exc
-    if nights < 1:
-        raise ValueError("Aufenthaltsdauer ungültig")
+    nights = stay_nights(arrival, departure)
     seen: dict[str, int] = {}
     for item in normalized:
         kind = item["position_type"]
@@ -163,6 +213,20 @@ def validate_mittelhof_positions(lines: Any, arrival: str, departure: str) -> No
             raise ValueError("Mittelhof-Leistungsposition muss positiv sein")
     if seen.get("rent") != 1:
         raise ValueError("Eine Mietposition ist zwingend erforderlich")
+    gross = next(Decimal(row["gross"]) for row in normalized if row["position_type"] == "rent")
+    expected = expected_discount(gross, nights)
+    discounts = [row for row in normalized if row["position_type"] == "stay_discount"]
+    if nights < DISCOUNT_MIN_NIGHTS:
+        if discounts:
+            raise ValueError("Vor der 8. Nacht kein Mietdauernachlass zulässig")
+    else:
+        if len(discounts) != 1:
+            raise ValueError("Ab der 8. Nacht sind 10 % Mietdauernachlass Pflicht")
+        row = discounts[0]
+        if Decimal(row["gross"]) != expected:
+            raise ValueError("Mietdauernachlass muss genau 10 % der gesamten Miete betragen")
+        if row.get("discount_rule") != DISCOUNT_RULE:
+            raise ValueError("Mietdauernachlass muss die bestätigte Regel ausweisen")
 
 
 def compose_message(context: dict[str, Any], invoice: dict[str, Any]) -> dict[str, str]:
@@ -300,7 +364,12 @@ def revise_draft(draft: dict[str, Any], changes: dict[str, Any]) -> dict[str, An
             if key in ("total_gross", "paid_amount"):
                 val = decimal_money(val)
             elif key == "line_items":
-                val = normalize_lines(val)
+                context = updated.get("booking_context") or {}
+                val, calculated_total = apply_duration_discount(
+                    val, str(context.get("arrival") or ""),
+                    str(context.get("departure") or ""),
+                )
+                invoice["total_gross"] = calculated_total
             elif key == "payment_verified":
                 if not isinstance(val, bool):
                     raise ValueError("payment_verified muss true oder false sein")
