@@ -84,8 +84,11 @@ class GuestDraftRepository:
                     existing["audit"].append({"at": utc_now(), "event": "booking_changed_needs_review"})
                     await self._save()
                 if acknowledge_source:
+                    refreshed = make_draft(booking)
                     existing["source_fingerprint"] = fingerprint
-                    existing["source_channel"] = make_draft(booking)["source_channel"]
+                    existing["source_channel"] = refreshed["source_channel"]
+                    existing["source_channel_class"] = refreshed["source_channel_class"]
+                    existing["booking_context"] = refreshed["booking_context"]
                     existing["source_change_pending"] = False
                     existing["revision"] += 1
                     existing["updated_at"] = utc_now()
