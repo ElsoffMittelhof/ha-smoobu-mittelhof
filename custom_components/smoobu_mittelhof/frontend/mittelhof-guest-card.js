@@ -100,7 +100,8 @@ class MittelhofGuestCard extends HTMLElement {
     const root = this.shadowRoot;
     const values = {};
     const keys = [
-      "recipient_name", "recipient_address", "description", "total_gross",
+      "recipient_name", "recipient_address", "recipient_street",
+      "recipient_postal_code", "recipient_city", "recipient_country", "description", "total_gross",
       "paid_amount", "due_date", "payment_note", "tax_note"
     ];
     for (const key of keys) {
@@ -138,6 +139,21 @@ class MittelhofGuestCard extends HTMLElement {
       this._selected = await this._api("GET", "bookings/" + id);
       this._hasUnsaved = false;
       await this._refreshInboxSilent();
+    });
+  }
+
+  async _exportInvoiceDraft() {
+    if (!this._selected || this._hasUnsaved || this._selected.source_changed) return;
+    await this._run(async () => {
+      const id = this._selected.booking.id;
+      const payload = await this._api("GET", "bookings/" + id + "/invoice-export");
+      const file = new Blob([JSON.stringify(payload, null, 2)], {type: "application/json"});
+      const address = URL.createObjectURL(file);
+      const element = document.createElement("a");
+      element.href = address;
+      element.download = "mittelhof-invoice-draft-" + id + ".json";
+      element.click();
+      URL.revokeObjectURL(address);
     });
   }
 
@@ -228,7 +244,10 @@ class MittelhofGuestCard extends HTMLElement {
     if (!d) return html + '<button data-op="prepare">Entwurf für Buchung vorbereiten</button>';
     const inv = d.invoice, msg = d.message;
     html += '<p class="meta">Entwurf Revision ' + esc(d.revision) + ' · Nachricht: ' +
-      esc(msg.status) + ' · Rechnung: ' + esc(inv.status) + '</p>';
+      esc(msg.status) + ' · Rechnung: ' + esc(inv.status) + '</p>' +
+      '<p><strong>Geplante Rechnungsnummer:</strong> ' +
+      esc(selected.proposed_invoice_number || 'Hausnummer in HA-Unterkunftszuordnung prüfen') +
+      ' · Aufbau: Hausnummer + Anreise JJJJMMTT</p>';
     const pf = selected.invoice_preflight;
     if (pf) {
       html += '<div class="preflight"><h4>Rechnungsprüfung (Entwurf)</h4>' +
@@ -245,7 +264,11 @@ class MittelhofGuestCard extends HTMLElement {
     html += '<div class="edit-grid"><section><h4>Rechnungsentwurf (noch keine Rechnung)</h4>' +
       '<p><img class="logo" src="/local/smoobu_mittelhof/invoice-logo.png" alt="Ferienhaus Mittelhof – Logo" /></p>' +
       this._field("recipient_name", "Rechnungsempfänger", inv.recipient_name) +
-      this._field("recipient_address", "Rechnungsanschrift", inv.recipient_address, true) +
+      this._field("recipient_address", "Freitext-Anschrift (optional, nicht EN16931)", inv.recipient_address, true) +
+      this._field("recipient_street", "Straße und Hausnummer", inv.recipient_street) +
+      this._field("recipient_postal_code", "Postleitzahl", inv.recipient_postal_code) +
+      this._field("recipient_city", "Ort", inv.recipient_city) +
+      this._field("recipient_country", "Ländercode (DE, NL, FR ...)", inv.recipient_country) +
       this._field("description", "Leistungstext", inv.description, true) +
       this._field("total_gross", "Rechnungsbetrag brutto (€)", inv.total_gross) +
       this._field("paid_amount", "Nachweislich bereits bezahlt (€)", inv.paid_amount) +
@@ -267,6 +290,9 @@ class MittelhofGuestCard extends HTMLElement {
       '</section></div><div class="actions">' +
       '<button data-op="prepare">Mit aktuellem Buchungsstand abgleichen</button>' +
       '<button data-op="save">Änderungen speichern</button>' +
+      '<button data-op="invoice-export" ' +
+      (!selected.source_changed && selected.proposed_invoice_number ? "" : "disabled") +
+      '>Rechnungsentwurf exportieren (JSON, personenbezogen)</button>' +
       '<button data-op="regenerate" ' +
       (msg.status === "draft" && !selected.source_changed ? "" : "disabled") +
       '>Nachricht aus Zahlungsdaten erzeugen</button>' +
@@ -315,7 +341,8 @@ class MittelhofGuestCard extends HTMLElement {
     this.shadowRoot.querySelectorAll('[data-op]').forEach((el) =>
       el.addEventListener("click", () => {
         const actions = { refresh: () => this._loadInbox(), prepare: () => this._prepare(),
-          save: () => this._save(), regenerate: () => this._action("regenerate"),
+          save: () => this._save(), "invoice-export": () => this._exportInvoiceDraft(),
+          regenerate: () => this._action("regenerate"),
           approve: () => this._action("approve"), send: () => this._action("send") };
         if (actions[el.dataset.op]) actions[el.dataset.op]();
       }));
