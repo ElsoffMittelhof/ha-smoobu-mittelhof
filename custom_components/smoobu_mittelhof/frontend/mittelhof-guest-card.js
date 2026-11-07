@@ -9,6 +9,7 @@ class MittelhofGuestCard extends HTMLElement {
     this._selected = null;
     this._busy = false;
     this._error = "";
+    this._hasUnsaved = false;
   }
 
   setConfig(config) {
@@ -45,18 +46,23 @@ class MittelhofGuestCard extends HTMLElement {
   }
 
   async _loadInbox() {
+    if (this._hasUnsaved && !window.confirm("Ungespeicherte Änderungen verwerfen?")) return;
     await this._run(async () => { this._inbox = await this._api("GET", "threads"); });
   }
 
   async _open(id) {
+    if (this._hasUnsaved && !window.confirm("Ungespeicherte Änderungen verwerfen?")) return;
     await this._run(async () => {
+      this._hasUnsaved = false;
       this._selected = await this._api("GET", "bookings/" + encodeURIComponent(id));
     });
   }
 
   async _prepare() {
     if (!this._selected) return;
+    if (this._hasUnsaved && !window.confirm("Ungespeicherte Änderungen verwerfen?")) return;
     await this._run(async () => {
+      this._hasUnsaved = false;
       const id = this._selected.booking.id;
       await this._api("POST", "bookings/" + id + "/draft", {});
       this._selected = await this._api("GET", "bookings/" + id);
@@ -117,13 +123,14 @@ class MittelhofGuestCard extends HTMLElement {
         revision: d.revision, changes
       });
       this._selected = await this._api("GET", "bookings/" + id);
+      this._hasUnsaved = false;
       await this._refreshInboxSilent();
     });
   }
 
   async _action(action) {
     const d = this._selected?.draft;
-    if (!d) return;
+    if (!d || this._hasUnsaved) return;
     if (action === "send" && !window.confirm(
       "Die freigegebene Nachricht jetzt wirklich über Smoobu an den Gast senden? " +
       "Ein Rechnungs-PDF wird NICHT angehängt."
@@ -240,6 +247,16 @@ class MittelhofGuestCard extends HTMLElement {
       (this._error ? '<p class="warning" role="alert">' + esc(this._error) + '</p>' : '') +
       '<div class="layout"><aside>' + this._renderInbox() + '</aside><main>' +
       this._renderBooking() + '</main></div></ha-card>';
+    this.shadowRoot.querySelectorAll('[data-field]').forEach((el) =>
+      el.addEventListener("input", () => {
+        this._hasUnsaved = true;
+        for (const op of ["approve", "send"]) {
+          const button = this.shadowRoot.querySelector('[data-op="' + op + '"]');
+          if (button) button.disabled = true;
+        }
+      }));
+    const logo = this.shadowRoot.querySelector('.logo');
+    if (logo) logo.addEventListener("error", () => { logo.style.display = "none"; });
     this.shadowRoot.querySelectorAll('[data-booking]').forEach((el) =>
       el.addEventListener("click", () => this._open(el.dataset.booking)));
     this.shadowRoot.querySelectorAll('[data-op]').forEach((el) =>
