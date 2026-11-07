@@ -17,6 +17,7 @@ class TestInvoiceNumberPreview(unittest.TestCase):
         self.assertEqual(mod.planned_number("Ferienhaus 14", "2027-01-05"), "1420270105")
         self.assertEqual(mod.planned_number("Mittelhof Haus 15", "2027-07-18"), "1520270718")
         self.assertEqual(mod.planned_number("15", "2027-07-18"), "1520270718")
+        self.assertEqual(mod.planned_number("Ferienwohnung 13", "2026-12-10"), "1320261210")
 
     def test_ambiguous_names_fail_closed(self):
         for name in ("Haus 16", "Haus 13 und 14", "Haus 113", "Apartment", "Straße 13", ""):
