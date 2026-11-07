@@ -28,3 +28,4 @@ class SmoobuRuntime:
     guest_unsub: Any = None
     guest_timer_unsub: Any = None
     guest_message_send_enabled: bool = False
+    guest_portal_enabled: bool = False
