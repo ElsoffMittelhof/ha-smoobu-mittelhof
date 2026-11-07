@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 from pathlib import Path
+import logging
 
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
@@ -54,6 +55,8 @@ from .storage import SmoobuStateStore
 from .templates import TemplateRepository
 from .workflow import WorkflowManager
 from .guest_portal import GuestDraftRepository, register_guest_views, sync_guest_drafts
+
+_LOGGER = logging.getLogger(__name__)
 
 FRONTEND_DIR = Path(__file__).parent / "frontend"
 FRONTEND_URL = "/smoobu_mittelhof/frontend"
@@ -180,12 +183,20 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data[DOMAIN][entry.entry_id] = runtime
 
     await coordinator.async_config_entry_first_refresh()
-    await sync_guest_drafts(runtime)
-    runtime.guest_unsub = coordinator.async_add_listener(
-        lambda: hass.async_create_task(sync_guest_drafts(runtime))
-    )
     await runtime.workflow.async_start()
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+
+    async def _safe_sync_guest_drafts() -> None:
+        try:
+            await sync_guest_drafts(runtime)
+        except Exception:
+            # Guest draft sync must never interrupt existing NUKI/laundry services.
+            _LOGGER.exception("Guest draft synchronization failed")
+
+    runtime.guest_unsub = coordinator.async_add_listener(
+        lambda: hass.async_create_task(_safe_sync_guest_drafts())
+    )
+    hass.async_create_task(_safe_sync_guest_drafts())
     return True
 
 
