@@ -225,34 +225,82 @@ class TestGuestDrafts(unittest.TestCase):
             {"position_type": "cleaning", "description": "Reinigung", "gross": "50.00", "tax_rate": "7"},
             {"position_type": "extra_person", "description": "Zusätzliche Person", "gross": "40.00", "tax_rate": "7", "quantity": 2},
             {"position_type": "dog", "description": "Hund", "gross": "20.00", "tax_rate": "7", "quantity": 2},
-            {"position_type": "stay_discount", "description": "Nachlass", "gross": "-30.00", "tax_rate": "7",
-             "discount_nights": 4, "discount_rule": "4 Nächte, Betreiber-Rabatt schriftlich geprüft"},
+            {"position_type": "stay_discount", "description": "10 % Mietdauernachlass ab 8 Nächten",
+             "gross": "-50.00", "tax_rate": "7", "discount_nights": 8,
+             "discount_rule": mod.DISCOUNT_RULE},
         ]
-        mod.validate_mittelhof_positions(lines, "2027-01-10", "2027-01-14")
+        mod.validate_mittelhof_positions(lines, "2027-01-10", "2027-01-18")
         for index in (2, 3):
             bad = [dict(item) for item in lines]
             bad[index]["quantity"] = 3
             with self.assertRaises(ValueError):
-                mod.validate_mittelhof_positions(bad, "2027-01-10", "2027-01-14")
+                mod.validate_mittelhof_positions(bad, "2027-01-10", "2027-01-18")
         wrong = [dict(item) for item in lines]
         wrong[0]["tax_rate"] = "19"
         with self.assertRaisesRegex(ValueError, "7"):
-            mod.validate_mittelhof_positions(wrong, "2027-01-10", "2027-01-14")
+            mod.validate_mittelhof_positions(wrong, "2027-01-10", "2027-01-18")
 
-    def test_discount_requires_explicit_duration_rule_not_fictional_threshold(self):
-        data = [
+    def test_duration_discount_7_8_9_nights_rent_only_and_total_auto(self):
+        base = [
             {"position_type": "rent", "description": "Miete", "gross": "500.00", "tax_rate": "7"},
-            {"position_type": "stay_discount", "description": "Nachlass", "gross": "-10.00", "tax_rate": "7",
-             "discount_nights": 4, "discount_rule": ""},
+            {"position_type": "cleaning", "description": "Reinigung", "gross": "50.00", "tax_rate": "7"},
+            {"position_type": "dog", "description": "Hund", "gross": "20.00", "tax_rate": "7", "quantity": 2},
         ]
-        with self.assertRaisesRegex(ValueError, "Rabattstaffel"):
-            mod.validate_mittelhof_positions(data, "2027-01-10", "2027-01-14")
-        data[1]["discount_rule"] = "manuell bestätigte 4-Nächte-Regel"
-        data[1]["discount_nights"] = 5
-        with self.assertRaisesRegex(ValueError, "Aufenthaltsnächte"):
-            mod.validate_mittelhof_positions(data, "2027-01-10", "2027-01-14")
-        data[1]["discount_nights"] = 4
-        mod.validate_mittelhof_positions(data, "2027-01-10", "2027-01-14")
+        for nights in (1, 7):
+            end = f"2027-01-{10 + nights:02d}"
+            rows, total = mod.apply_duration_discount(base, "2027-01-10", end)
+            self.assertEqual(total, "570.00")
+            self.assertEqual(len(rows), 3)
+            mod.validate_mittelhof_positions(rows, "2027-01-10", end)
+        for nights in (8, 9):
+            end = f"2027-01-{10 + nights:02d}"
+            rows, total = mod.apply_duration_discount(base, "2027-01-10", end)
+            self.assertEqual(total, "520.00")
+            self.assertEqual(rows[-1]["gross"], "-50.00")
+            self.assertEqual(rows[-1]["discount_nights"], nights)
+            self.assertEqual(rows[-1]["discount_rule"], mod.DISCOUNT_RULE)
+            mod.validate_mittelhof_positions(rows, "2027-01-10", end)
+            rows2, total2 = mod.apply_duration_discount(rows, "2027-01-10", end)
+            self.assertEqual(total2, total)
+            self.assertEqual(len(rows2), 4)
+
+    def test_auto_discount_round_half_up_cents(self):
+        lines = [{"position_type": "rent", "description": "Miete",
+                  "gross": "100.05", "tax_rate": "7"}]
+        rows, total = mod.apply_duration_discount(lines, "2027-01-10", "2027-01-18")
+        self.assertEqual(rows[-1]["gross"], "-10.01")
+        self.assertEqual(total, "90.04")
+        with self.assertRaisesRegex(ValueError, "10 %"):
+            wrong = [dict(x) for x in rows]
+            wrong[-1]["gross"] = "-10.00"
+            mod.validate_mittelhof_positions(wrong, "2027-01-10", "2027-01-18")
+
+    def test_no_discount_under_eight_and_correct_rule_only(self):
+        lines = [{"position_type": "rent", "description": "Miete",
+                  "gross": "500.00", "tax_rate": "7"}]
+        with self.assertRaisesRegex(ValueError, "Pflicht"):
+            mod.validate_mittelhof_positions(lines, "2027-01-10", "2027-01-18")
+        expanded, _ = mod.apply_duration_discount(lines, "2027-01-10", "2027-01-18")
+        with self.assertRaisesRegex(ValueError, "Vor der 8"):
+            mod.validate_mittelhof_positions(expanded, "2027-01-10", "2027-01-17")
+        invalid = [dict(x) for x in expanded]
+        invalid[-1]["discount_rule"] = "Nicht die bestätigte Rabattregel"
+        with self.assertRaisesRegex(ValueError, "bestätigte Regel"):
+            mod.validate_mittelhof_positions(invalid, "2027-01-10", "2027-01-18")
+
+    def test_draft_save_calculates_discount_from_rent_and_preserves_base(self):
+        d = mod.make_draft({**booking(), "departure": "2027-01-18"})
+        revised = mod.revise_draft(d, {"invoice": {
+            "line_items": [{"description": "Miete", "position_type": "rent",
+                            "quantity": 1, "gross": "500.00", "tax_rate": "7"},
+                           {"description": "Reinigung", "position_type": "cleaning",
+                            "quantity": 1, "gross": "50.00", "tax_rate": "7"}],
+            "paid_amount": "0.00",
+        }})
+        self.assertEqual(revised["invoice"]["total_gross"], "500.00")
+        self.assertEqual(revised["invoice"]["line_items"][-1]["gross"], "-50.00")
+        self.assertEqual(d["invoice"]["total_gross"], "420.00")
+        self.assertEqual(len(revised["invoice"]["line_items"]), 3)
 
     def test_sent_message_stays_immutable_while_invoice_changes(self):
         draft = mod.make_draft(booking())
