@@ -99,3 +99,21 @@ Die Lovelace-Gastkarte enthält jetzt einen ausdrücklich beschrifteten Button z
 - Das private Testarchiv ist keine revisionssichere GoBD-/WORM-Rechnungsablage. Keine finale Nummernvergabe, kein Ausstellen, kein PDF-Anhang und kein Gastversand.
 
 Die bestehende produktive HACS-Integration und alle Wäsche-/NUKI-/IT.NRW-Workflows bleiben unverändert. Vor einem echten HA-Einsatz sind Laufzeit-/UI-Tests im Testsystem erforderlich.
+
+## Mittelhof-Positionen und Umsatzsteuer – aktualisiert 2026-11-07
+
+Für die aktuelle Mittelhof-Beherbergung wurden vom Betreiber genau fünf Positionsarten genannt:
+- `rent` – **Miete**, zwingend genau eine Position.
+- `cleaning` – **Reinigung**, maximal eine Position.
+- `extra_person` – **zusätzliche Person**, insgesamt höchstens zwei.
+- `dog` – **Hund**, insgesamt höchstens zwei in der Unterkunft mituntergebrachte Tiere.
+- `stay_discount` – **Nachlass nach Mietdauer**, genau eine negative Position möglich; Anzahl Übernachtungen und die vom Betreiber manuell bestätigte Rabattstaffel müssen übereinstimmen.
+
+Im HA-Rechnungskarteneditor sind die Positionen über strukturierte Felder bearbeitbar: Art, Beschreibung, Menge, Gesamtbrutto dieser Menge, gegebenenfalls Nachlassregel und Übernachtungen. Pro Kategorie wird genau 7 % an die private ZUGFeRD-Engine übertragen. Andere oder nicht eingeordnete Smoobu-Preispositionen werden nicht als '7 %' geraten; der Bearbeiter muss sie zuvor einer der bekannten Kategorien zuordnen.
+
+Der Steuersatz 7 % entspricht für diese Beherbergungsleistungen der bestätigten Betreiberpolicy. Reinigung der vermieteten Räume und Mitunterbringung von Tieren sind in Abschnitt 12.16 Abs. 4 UStAE des BMF ausdrücklich als begünstigte Leistungen genannt. Eine eigenständige Tierpension oder sonstige Zusatzleistung ist davon nicht automatisch abgedeckt. https://ao.bundesfinanzministerium.de/usth/2024/A-Umsatzsteuergesetz/IV-Steuer-und-Vorsteuer/Paragraf-12/ae-12-16.html
+
+Die genaue automatische Rabattstaffel nach Mietdauer wurde noch nicht definiert; deshalb wird KEIN Nachlass eigenständig berechnet oder geschätzt. Der Nutzer muss den Betrag und die Staffel manuell bestätigen. Cent-/Steuerdifferenzen blockieren die ZUGFeRD-Testdokumenterstellung.
+
+Die private Rechnungssteller-/Bank-Konfiguration liegt ausschließlich beim eigenen Rechnungsdienst. Im öffentlichen HACS-Repository befinden sich **keine** echten Namen, USt-IDs, IBANs oder BICs. Release-Kandidat bis zur echten HA- und Steuerabnahme weiterhin nur DEMO.
+
