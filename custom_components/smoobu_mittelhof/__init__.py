@@ -51,6 +51,7 @@ from .services import async_register_services
 from .storage import SmoobuStateStore
 from .templates import TemplateRepository
 from .workflow import WorkflowManager
+from .guest_portal import GuestDraftRepository, register_guest_views, sync_guest_drafts
 
 FRONTEND_DIR = Path(__file__).parent / "frontend"
 FRONTEND_URL = "/smoobu_mittelhof/frontend"
@@ -63,6 +64,7 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
             [StaticPathConfig(FRONTEND_URL, str(FRONTEND_DIR), False)]
         )
     await async_register_services(hass)
+    register_guest_views(hass)
     return True
 
 
@@ -168,9 +170,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         houses=houses,
     )
     runtime.workflow = WorkflowManager(hass, runtime, entry)
+    runtime.guest_drafts = GuestDraftRepository(hass)
+    await runtime.guest_drafts.async_load()
     hass.data[DOMAIN][entry.entry_id] = runtime
 
     await coordinator.async_config_entry_first_refresh()
+    await sync_guest_drafts(runtime)
+    runtime.guest_unsub = coordinator.async_add_listener(
+        lambda: hass.async_create_task(sync_guest_drafts(runtime))
+    )
     await runtime.workflow.async_start()
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
@@ -182,6 +190,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         await runtime.workflow.async_stop()
     unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unloaded:
+        if runtime and runtime.guest_unsub:
+            runtime.guest_unsub()
         hass.data[DOMAIN].pop(entry.entry_id, None)
         if not hass.data[DOMAIN]:
             hass.data.pop(DOMAIN, None)
