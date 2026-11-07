@@ -180,6 +180,45 @@ class TestGuestDrafts(unittest.TestCase):
         text = mod.compose_message({"guest": "Test", "language": "de"}, inv)
         self.assertIn("Bitte überweisen Sie", text["body"])
 
+    def test_demo_preview_request_requires_complete_manual_review(self):
+        d = mod.make_draft(booking())
+        with self.assertRaises(ValueError):
+            mod.request_invoice_demo_preview(d)
+        ready = mod.revise_draft(d, {"invoice": {
+            "recipient_street": "Musterweg 1", "recipient_postal_code": "12345",
+            "recipient_city": "Musterstadt", "recipient_country": "DE",
+            "payment_verified": True, "payment_flow": "guest_invoice",
+            "due_date": "2027-01-01", "line_items": [
+                {"description": "Aufenthalt", "gross": "420.00", "tax_rate": "7"}
+            ],
+        }})
+        queued = mod.request_invoice_demo_preview(ready)
+        self.assertEqual(queued["invoice_review"]["state"], "requested")
+        self.assertEqual(queued["invoice_review"]["requested_revision"], ready["revision"])
+        self.assertNotEqual(queued["invoice_review"]["state"], "approved_preview")
+        again = mod.request_invoice_demo_preview(queued)
+        self.assertEqual(len(again["audit"]), len(queued["audit"]))
+        edited = mod.revise_draft(queued, {"message": {"subject": "Neuer Betreff"}})
+        self.assertEqual(edited["invoice_review"]["state"], "draft")
+        with self.assertRaises(ValueError):
+            mod.request_invoice_demo_preview(dict(ready, source_change_pending=True))
+
+    def test_demo_preview_request_refuses_unresolved_tax_and_payment(self):
+        d = mod.make_draft(booking())
+        ready = mod.revise_draft(d, {"invoice": {
+            "recipient_street": "Musterweg 1", "recipient_postal_code": "12345",
+            "recipient_city": "Musterstadt", "recipient_country": "DE",
+            "payment_flow": "platform", "payment_verified": True,
+        }})
+        with self.assertRaisesRegex(ValueError, "Steuersatz"):
+            mod.request_invoice_demo_preview(ready)
+        changed = mod.revise_draft(ready, {"invoice": {
+            "line_items": [{"description": "Aufenthalt", "gross": "420.00", "tax_rate": "19"}],
+            "payment_verified": False,
+        }})
+        with self.assertRaisesRegex(ValueError, "Zahlungs"):
+            mod.request_invoice_demo_preview(changed)
+
     def test_missing_reservation_id_fails(self):
         b = booking()
         b["id"] = None
