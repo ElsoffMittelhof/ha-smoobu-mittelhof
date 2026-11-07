@@ -72,3 +72,16 @@ The next invoice engine will use ZUGFeRD 2.5.2/EN16931 in PDF/A-3, including con
 
 
 - The 30-minute synchronization is serialized and runs outside startup-critical Wäsche/NUKI setup. Smoobu source-difference acknowledgement is explicit; pending edits remain preserved.
+
+## Rechnungsnummern und Test-Brücke zu Mittelhof (Entwicklungsstufe 2026-11-07)
+
+- **Vorgegebener Nummernaufbau:** `<Hausnummer><Jahr der Anreise><Monat der Anreise><Tag der Anreise>` ohne Trennzeichen, genau zehn Ziffern. Beispiele: `1320261210`, `1420270105`, `1520270718`.
+- Hausnummern ausschließlich **13, 14, 15**; Datum ausschließlich gültiges Smoobu-Anreisedatum; nicht Rechnungsdatum. Der HA-Nummervorschlag ist eine **nicht reservierte Anzeige**, keine Rechnungsvergabe.
+- Die Zuordnung stammt aus dem lokal konfigurierten Smoobu-Unterkunftsnamen und wird nur bei eindeutigem `Haus 13`/`Ferienwohnung 14` u.ä. angezeigt. Mehrdeutige Namen oder Datumsangaben **sperren den Export**.
+- Das private Nummernjournal prüft Nummernkollisionen transaktional: Bei zwei Buchungen desselben Hauses mit gleichem Anreisedatum gibt es **keinen stillschweigenden Suffix** und keine doppelte Rechnung. Umbuchungen mit neuer Anreise erfordern gesonderte manuelle Prüfung.
+- Bearbeitbare Rechnungsempfänger-Anschrift jetzt zusätzlich strukturiert: Straße, Postleitzahl, Ort, ISO-Ländercode. Eine Freitextadresse allein ist nicht ausreichend für EN16931.
+- Authentifizierter, **nur für HA-Administratoren** zugänglicher Lese-Endpunkt: `GET /api/smoobu_mittelhof/guest/v1/bookings/{booking_id}/invoice-export`. Er liefert nur die freigegebenen Entwurfsfelder und Buchungsbezüge, **keine** Gastnachrichten, NUKI-Codes, Bank- oder Smoobu-API-Schlüssel. Bei geänderter Smoobu-Buchung sperrt er den Export.
+- Die Lovelace-Karte zeigt die geplante Nummer und bietet einen expliziten JSON-Export mit personenbezogenen Daten. Exportierte Dateien **nur lokal und geschützt** behandeln, keinesfalls in GitHub oder unsichere Chat-/Mail-Systeme hochladen.
+- Der private Rechnungs-Engine-Branch kann den Export entweder als lokale JSON-Datei übernehmen oder über eine mit `MITTELHOF_HA_TOKEN` authentifizierte HTTPS-/Loopback-Abfrage direkt aus HA holen. Die Zuordnung Smoobu-Apartment-ID → Hausnummer wird **nochmals unabhängig** im privaten Dienst geprüft.
+- Der private Renderer bleibt im **TEST-Modus**: In XML/PDF steht `DEMO-1320261210`, im Entwurf wird die künftige Originalnummer `1320261210` gezeigt. Damit entsteht **noch keine ausgestellte Rechnung**. Zusätzliche Steuerprüfung, GoBD-Archivierung, echte Nummernvergabe und HA-Laufzeittests sind weiterhin Release-Blocker.
+- Der private SQLite-Proposal-Journal-Hash-Verlauf schützt Tests auf logische Konsistenz, ist **kein manipulationssicheres GoBD-Belegarchiv**. Er wird nicht in GitHub oder Recorder synchronisiert.
