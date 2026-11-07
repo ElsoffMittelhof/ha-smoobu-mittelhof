@@ -179,7 +179,7 @@ class SmoobuOptionsFlow(OptionsFlowWithReload):
             vol.Required(CONF_HOUSES, default=current_houses): selector.TextSelector(
                 selector.TextSelectorConfig(multiline=True)
             ),
-            vol.Required(CONF_UPDATE_INTERVAL_MINUTES, default=DEFAULT_UPDATE_INTERVAL_MINUTES): vol.All(int, vol.Range(min=15, max=1440)),
+            vol.Required(CONF_UPDATE_INTERVAL_MINUTES, default=options.get(CONF_UPDATE_INTERVAL_MINUTES, DEFAULT_UPDATE_INTERVAL_MINUTES)): vol.All(int, vol.Range(min=15, max=1440)),
             vol.Required(CONF_HORIZON_DAYS, default=DEFAULT_HORIZON_DAYS): vol.All(int, vol.Range(min=14, max=365)),
             vol.Required(CONF_LOOKBACK_DAYS, default=DEFAULT_LOOKBACK_DAYS): vol.All(int, vol.Range(min=0, max=30)),
             vol.Required(CONF_SHOW_GUEST_NAMES, default=DEFAULT_SHOW_GUEST_NAMES): bool,
