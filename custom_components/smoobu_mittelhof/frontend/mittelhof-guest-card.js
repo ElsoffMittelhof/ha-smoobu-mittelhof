@@ -187,6 +187,29 @@ class MittelhofGuestCard extends HTMLElement {
       '<small>Die Posteingangsliste zeigt die erste Smoobu-Seite (bis 100 Gespräche) und alle lokalen Entwürfe.</small>';
   }
 
+  _renderInvoicePreview(invoice, preflight) {
+    const esc = MittelhofGuestCard.esc;
+    const lines = Array.isArray(invoice.line_items) ? invoice.line_items : [];
+    const entries = lines.map((line) => '<tr><td>' + esc(line.description || '') +
+      '</td><td>' + esc(line.tax_rate || 'offen') +
+      '</td><td class="money">' + esc(line.gross || '0.00') + ' €</td></tr>').join('');
+    const outstanding = preflight ? preflight.outstanding : '—';
+    return '<section class="invoice-preview" aria-label="Nicht rechtsverbindliche Rechnungsvorschau">' +
+      '<div class="invoice-head"><img class="invoice-logo" src="/local/smoobu_mittelhof/invoice-logo.png" alt="Ferienhaus Mittelhof" />' +
+      '<div><strong>RECHNUNGSVORSCHAU</strong><small>ENTWURF · nicht ausgestellt · keine Rechnungsnummer</small></div></div>' +
+      '<div class="invoice-recipient"><small>Rechnungsempfänger</small><strong>' +
+      esc(invoice.recipient_name || 'Noch nicht eingetragen') + '</strong>' +
+      '<div class="multiline">' + esc(invoice.recipient_address || 'Anschrift fehlt') + '</div></div>' +
+      '<p class="multiline">' + esc(invoice.description || '') + '</p>' +
+      '<table><thead><tr><th>Leistung</th><th>Steuer %</th><th>Brutto</th></tr></thead>' +
+      '<tbody>' + entries + '</tbody></table>' +
+      '<div class="invoice-totals"><div>Gesamt <strong>' + esc(invoice.total_gross) +
+      ' €</strong></div><div>Bereits bezahlt <strong>' + esc(invoice.paid_amount) +
+      ' €</strong></div><div>Offen <strong>' + esc(outstanding) + ' €</strong></div></div>' +
+      '<p class="multiline">' + esc(invoice.payment_note || '') + '</p>' +
+      '<small>Zahlungs- und Steuerdaten müssen vor Rechnungsausstellung überprüft werden.</small></section>';
+  }
+
   _renderBooking() {
     const esc = MittelhofGuestCard.esc;
     const selected = this._selected;
@@ -218,6 +241,7 @@ class MittelhofGuestCard extends HTMLElement {
     }
     if (selected.source_changed) html += '<div class="warning">Buchung seit Entwurf verändert. Bitte erneut vorbereiten und prüfen.</div>';
     if (!this._inbox?.message_send_enabled) html += '<p class="warning">Echter Gastversand ist in den HA-Integrationsoptionen deaktiviert.</p>';
+    html += this._renderInvoicePreview(inv, pf);
     html += '<div class="edit-grid"><section><h4>Rechnungsentwurf (noch keine Rechnung)</h4>' +
       '<p><img class="logo" src="/local/smoobu_mittelhof/invoice-logo.png" alt="Ferienhaus Mittelhof – Logo" /></p>' +
       this._field("recipient_name", "Rechnungsempfänger", inv.recipient_name) +
@@ -269,7 +293,7 @@ class MittelhofGuestCard extends HTMLElement {
       'textarea{min-height:80px}.checkbox{flex-direction:row;align-items:center}.checkbox input{width:auto}' +
       'button{cursor:pointer;border:1px solid var(--divider-color);border-radius:7px;padding:9px;background:var(--secondary-background-color);color:var(--primary-text-color)}' +
       'button:disabled{opacity:.45;cursor:not-allowed}.actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}.send{border-color:var(--success-color,#2a8)}' +
-      '.preflight{border:1px solid var(--divider-color);padding:10px;border-radius:8px;margin:10px 0}.warning{border-left:3px solid #c9943c;padding:8px;color:var(--primary-text-color)}.logo{max-width:220px;max-height:90px;object-fit:contain}' +
+      '.invoice-preview{border:1px solid var(--divider-color);padding:18px;margin:15px 0;border-radius:9px;max-width:700px;background:var(--card-background-color)}.invoice-head{display:flex;justify-content:space-between;align-items:center;gap:14px;margin-bottom:20px;flex-wrap:wrap}.invoice-head div{display:flex;flex-direction:column;gap:4px}.invoice-head small,.invoice-preview small{color:var(--secondary-text-color)}.invoice-logo{max-width:180px;max-height:90px;object-fit:contain}.invoice-recipient{display:flex;flex-direction:column;margin:12px 0 20px;gap:4px}.multiline{white-space:pre-wrap;overflow-wrap:anywhere}.invoice-preview table{width:100%;border-collapse:collapse}.invoice-preview th{text-align:left;font-size:12px}.invoice-preview td,.invoice-preview th{border-bottom:1px solid var(--divider-color);padding:7px 4px}.invoice-preview .money{text-align:right}.invoice-totals{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:15px 0}.invoice-totals div{display:flex;flex-direction:column;gap:4px}.preflight{border:1px solid var(--divider-color);padding:10px;border-radius:8px;margin:10px 0}.warning{border-left:3px solid #c9943c;padding:8px;color:var(--primary-text-color)}.logo{max-width:220px;max-height:90px;object-fit:contain}' +
       '@media(max-width:850px){.layout,.edit-grid{grid-template-columns:1fr}.thread-list{max-height:240px}}' +
       '</style><ha-card><header><h2>Gäste & Rechnungsentwürfe</h2>' +
       '<button data-op="refresh" ' + (this._busy ? "disabled" : "") + '>Aktualisieren</button></header>' +
@@ -284,8 +308,8 @@ class MittelhofGuestCard extends HTMLElement {
           if (button) button.disabled = true;
         }
       }));
-    const logo = this.shadowRoot.querySelector('.logo');
-    if (logo) logo.addEventListener("error", () => { logo.style.display = "none"; });
+    this.shadowRoot.querySelectorAll('.logo,.invoice-logo').forEach((logo) =>
+      logo.addEventListener("error", () => { logo.style.display = "none"; }));
     this.shadowRoot.querySelectorAll('[data-booking]').forEach((el) =>
       el.addEventListener("click", () => this._open(el.dataset.booking)));
     this.shadowRoot.querySelectorAll('[data-op]').forEach((el) =>
