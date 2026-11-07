@@ -198,7 +198,8 @@ class GuestThreadsView(HomeAssistantView):
         summaries = await runtime.guest_drafts.list_summaries()
         return self.json({"threads": threads, "unread_messages": result.get("unread_messages", 0),
                           "page_count": result.get("page_count", 1),
-                          "drafts": summaries})
+                          "drafts": summaries,
+                          "message_send_enabled": runtime.guest_message_send_enabled})
 
 
 class GuestBookingView(HomeAssistantView):
@@ -272,6 +273,8 @@ class GuestMessageActionView(HomeAssistantView):
         if action not in ("approve", "send"):
             raise web.HTTPNotFound()
         runtime = _get_runtime(request.app["hass"])
+        if action == "send" and not runtime.guest_message_send_enabled:
+            raise web.HTTPForbidden(text="Gastversand ist in den Integrationsoptionen deaktiviert")
         body = await _parse_body(request)
         try:
             revision = int(body["revision"])
