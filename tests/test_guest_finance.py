@@ -121,6 +121,32 @@ class TestGuestDrafts(unittest.TestCase):
         ]}})
         self.assertEqual(changed["invoice"]["line_items"][0]["gross"], "-30.00")
 
+    def test_invoice_preflight_blocks_unvalidated_issuance(self):
+        invoice = mod.make_draft(booking())["invoice"]
+        report = mod.invoice_preflight(invoice)
+        self.assertFalse(report["ready_for_issuance"])
+        self.assertIn("Rechnungsanschrift fehlt", report["errors"])
+        self.assertEqual(report["outstanding"], "420.00")
+
+    def test_invoice_preflight_detects_wrong_line_sum(self):
+        invoice = mod.make_draft(booking())["invoice"]
+        invoice["recipient_address"] = "Musterstraße 1"
+        invoice["line_items"][0]["gross"] = "300.00"
+        report = mod.invoice_preflight(invoice)
+        self.assertTrue(any("Summe" in x for x in report["errors"]))
+        self.assertEqual(report["line_total"], "300.00")
+
+    def test_invoice_preflight_partial_payment(self):
+        invoice = mod.make_draft(booking())["invoice"]
+        invoice["recipient_address"] = "Musterstraße 1"
+        invoice["paid_amount"] = "200.00"
+        invoice["payment_flow"] = "guest_invoice"
+        invoice["payment_verified"] = True
+        invoice["due_date"] = "2027-01-01"
+        report = mod.invoice_preflight(invoice)
+        self.assertEqual(report["outstanding"], "220.00")
+        self.assertFalse(report["ready_for_issuance"])
+
     def test_missing_reservation_id_fails(self):
         b = booking()
         b["id"] = None
