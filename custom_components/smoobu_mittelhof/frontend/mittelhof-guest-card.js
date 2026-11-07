@@ -142,6 +142,22 @@ class MittelhofGuestCard extends HTMLElement {
     });
   }
 
+  async _requestDemoInvoicePreview() {
+    const d = this._selected?.draft;
+    if (!d || this._hasUnsaved || this._selected.source_changed) return;
+    if (!window.confirm(
+      "Nur eine ZUGFeRD-MUSTERVORSCHAU für diese gespeicherte Revision anfordern? " +
+      "Es wird KEINE Rechnung ausgestellt oder an Gäste versendet."
+    )) return;
+    await this._run(async () => {
+      const id = this._selected.booking.id;
+      await this._api("POST", "bookings/" + id + "/preview-request", {
+        revision: d.revision
+      });
+      this._selected = await this._api("GET", "bookings/" + id);
+    });
+  }
+
   async _exportInvoiceDraft() {
     if (!this._selected || this._hasUnsaved || this._selected.source_changed) return;
     await this._run(async () => {
@@ -243,6 +259,9 @@ class MittelhofGuestCard extends HTMLElement {
       '<div class="history"><h4>Gesprächsverlauf</h4>' + (messages || '<p>Keine Nachrichten</p>') + '</div>';
     if (!d) return html + '<button data-op="prepare">Entwurf für Buchung vorbereiten</button>';
     const inv = d.invoice, msg = d.message;
+    const review = d.invoice_review || {};
+    const previewRequested = review.state === "requested" &&
+      review.requested_revision === d.revision;
     html += '<p class="meta">Entwurf Revision ' + esc(d.revision) + ' · Nachricht: ' +
       esc(msg.status) + ' · Rechnung: ' + esc(inv.status) + '</p>' +
       '<p><strong>Geplante Rechnungsnummer:</strong> ' +
@@ -258,6 +277,10 @@ class MittelhofGuestCard extends HTMLElement {
         (pf.warnings || []).map((e) => '<p class="warning">Prüfen: ' + esc(e) + '</p>').join('') +
         '<p><strong>Keine Rechnungsfreigabe und kein ZUGFeRD-Versand in V1.</strong></p></div>';
     }
+    html += '<p class="meta">ZUGFeRD-Musterprüfung: ' +
+      (previewRequested ? 'für Revision ' + esc(d.revision) + ' angefordert' :
+        'noch nicht angefordert bzw. nach Bearbeitung ungültig') +
+      '. Keine endgültige Rechnungsfreigabe.</p>';
     if (selected.source_changed) html += '<div class="warning">Buchung seit Entwurf verändert. Bitte erneut vorbereiten und prüfen.</div>';
     if (!this._inbox?.message_send_enabled) html += '<p class="warning">Echter Gastversand ist in den HA-Integrationsoptionen deaktiviert.</p>';
     html += this._renderInvoicePreview(inv, pf);
@@ -282,7 +305,7 @@ class MittelhofGuestCard extends HTMLElement {
       this._field("payment_note", "Zahlungshinweis", inv.payment_note, true) +
       this._field("tax_note", "Steuerhinweis (fachlich prüfen)", inv.tax_note, true) +
       this._field("line_items", "Positionen als JSON (inkl. steuerlicher Einordnung)", JSON.stringify(inv.line_items, null, 2), true) +
-      '<p class="warning">Keine Steuerberechnung, Rechnungsnummer oder ZUGFeRD-Datei in diesem Entwicklungsstand.</p>' +
+      '<p class="warning">Nur DEMO-Mustervorschau im privaten Rechnungsdienst; keine echte Ausstellung oder Versand.</p>' +
       '</section><section><h4>Nachrichtenentwurf</h4>' +
       this._field("subject", "Betreff", msg.subject) +
       this._field("body", "Nachricht", msg.body, true) +
@@ -290,9 +313,14 @@ class MittelhofGuestCard extends HTMLElement {
       '</section></div><div class="actions">' +
       '<button data-op="prepare">Mit aktuellem Buchungsstand abgleichen</button>' +
       '<button data-op="save">Änderungen speichern</button>' +
+      '<button data-op="preview-request" ' +
+      (!selected.source_changed && selected.proposed_invoice_number &&
+       !previewRequested && pf && !pf.errors?.length ? "" : "disabled") +
+      '>ZUGFeRD-Musterprüfung anfordern (keine Ausstellung)</button>' +
       '<button data-op="invoice-export" ' +
-      (!selected.source_changed && selected.proposed_invoice_number ? "" : "disabled") +
-      '>Rechnungsentwurf exportieren (JSON, personenbezogen)</button>' +
+      (!selected.source_changed && selected.proposed_invoice_number &&
+        previewRequested ? "" : "disabled") +
+      '>Angeforderten Musterentwurf exportieren (JSON, personenbezogen)</button>' +
       '<button data-op="regenerate" ' +
       (msg.status === "draft" && !selected.source_changed ? "" : "disabled") +
       '>Nachricht aus Zahlungsdaten erzeugen</button>' +
@@ -341,7 +369,8 @@ class MittelhofGuestCard extends HTMLElement {
     this.shadowRoot.querySelectorAll('[data-op]').forEach((el) =>
       el.addEventListener("click", () => {
         const actions = { refresh: () => this._loadInbox(), prepare: () => this._prepare(),
-          save: () => this._save(), "invoice-export": () => this._exportInvoiceDraft(),
+          save: () => this._save(), "preview-request": () => this._requestDemoInvoicePreview(),
+          "invoice-export": () => this._exportInvoiceDraft(),
           regenerate: () => this._action("regenerate"),
           approve: () => this._action("approve"), send: () => this._action("send") };
         if (actions[el.dataset.op]) actions[el.dataset.op]();
