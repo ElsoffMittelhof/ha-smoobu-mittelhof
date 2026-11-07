@@ -151,7 +151,7 @@ def expected_discount(rent_gross: Any, nights: int) -> Decimal:
     return -discount
 
 
-def apply_duration_discount(lines: Any, arrival: str, departure: str) -> tuple[list[dict[str, Any]], str]:
+def apply_duration_discount(lines: Any, arrival: str, departure: str) -> tuple[list[dict[str, Any]], str | None]:
     """Canonicalize stay discount on saving a manually categorized rent.
 
     Never infer categories from Smoobu. The operator must first classify exactly
@@ -160,8 +160,9 @@ def apply_duration_discount(lines: Any, arrival: str, departure: str) -> tuple[l
     current = normalize_lines(lines)
     rent = [row for row in current if row["position_type"] == "rent"]
     if len(rent) != 1:
-        return current, str(sum((Decimal(x["gross"]) for x in current),
-                                Decimal("0.00")).quantize(Decimal("0.01")))
+        # Keep legacy, unclassified Smoobu positions editable without changing
+        # their original booking total; cannot issue until manually categorized.
+        return current, None
     nights = stay_nights(arrival, departure)
     discount = expected_discount(rent[0]["gross"], nights)
     clean = [row for row in current if row["position_type"] != "stay_discount"]
@@ -369,7 +370,8 @@ def revise_draft(draft: dict[str, Any], changes: dict[str, Any]) -> dict[str, An
                     val, str(context.get("arrival") or ""),
                     str(context.get("departure") or ""),
                 )
-                invoice["total_gross"] = calculated_total
+                if calculated_total is not None:
+                    invoice["total_gross"] = calculated_total
             elif key == "payment_verified":
                 if not isinstance(val, bool):
                     raise ValueError("payment_verified muss true oder false sein")
