@@ -39,10 +39,17 @@ class MittelhofGuestCard extends HTMLElement {
     if (this._busy) return;
     this._busy = true;
     this._error = "";
-    this._render();
     try { await callback(); }
     catch (err) { this._error = String(err?.message || err); }
-    finally { this._busy = false; this._render(); }
+    finally {
+      this._busy = false;
+      if (this._hasUnsaved && this._error) {
+        // Never destroy unsaved invoice or message fields after a failed API save.
+        window.alert("Änderungen NICHT gespeichert: " + this._error);
+      } else {
+        this._render();
+      }
+    }
   }
 
   async _loadInbox() {
@@ -114,7 +121,7 @@ class MittelhofGuestCard extends HTMLElement {
       };
     } catch (err) {
       this._error = "Rechnungspositionen sind kein gültiges JSON: " + String(err.message || err);
-      this._render();
+      window.alert("Änderungen NICHT gespeichert: " + this._error);
       return;
     }
     await this._run(async () => {
@@ -190,10 +197,20 @@ class MittelhofGuestCard extends HTMLElement {
     const inv = d.invoice, msg = d.message;
     html += '<p class="meta">Entwurf Revision ' + esc(d.revision) + ' · Nachricht: ' +
       esc(msg.status) + ' · Rechnung: ' + esc(inv.status) + '</p>';
+    const pf = selected.invoice_preflight;
+    if (pf) {
+      html += '<div class="preflight"><h4>Rechnungsprüfung (Entwurf)</h4>' +
+        '<p>Brutto: ' + esc(pf.gross) + ' € · Bezahlt: ' + esc(pf.paid) +
+        ' € · Offen: ' + esc(pf.outstanding) + ' € · Positionssumme: ' +
+        esc(pf.line_total) + ' €</p>' +
+        (pf.errors || []).map((e) => '<p class="warning">Fehler: ' + esc(e) + '</p>').join('') +
+        (pf.warnings || []).map((e) => '<p class="warning">Prüfen: ' + esc(e) + '</p>').join('') +
+        '<p><strong>Keine Rechnungsfreigabe und kein ZUGFeRD-Versand in V1.</strong></p></div>';
+    }
     if (selected.source_changed) html += '<div class="warning">Buchung seit Entwurf verändert. Bitte erneut vorbereiten und prüfen.</div>';
+    if (!this._inbox?.message_send_enabled) html += '<p class="warning">Echter Gastversand ist in den HA-Integrationsoptionen deaktiviert.</p>';
     html += '<div class="edit-grid"><section><h4>Rechnungsentwurf (noch keine Rechnung)</h4>' +
-      '<p><img class="logo" src="/local/smoobu_mittelhof/invoice-logo.png" alt="Ferienhaus Mittelhof – Logo" ' +
-      'onerror="this.style.display=\'none\'" /></p>' +
+      '<p><img class="logo" src="/local/smoobu_mittelhof/invoice-logo.png" alt="Ferienhaus Mittelhof – Logo" /></p>' +
       this._field("recipient_name", "Rechnungsempfänger", inv.recipient_name) +
       this._field("recipient_address", "Rechnungsanschrift", inv.recipient_address, true) +
       this._field("description", "Leistungstext", inv.description, true) +
@@ -219,7 +236,7 @@ class MittelhofGuestCard extends HTMLElement {
       '<button data-op="save">Änderungen speichern</button>' +
       '<button data-op="approve" ' + (msg.status === "draft" && !selected.source_changed ? "" : "disabled") +
       '>Nachricht freigeben</button>' +
-      '<button class="send" data-op="send" ' + (msg.status === "approved" && !selected.source_changed ? "" : "disabled") +
+      '<button class="send" data-op="send" ' + (msg.status === "approved" && !selected.source_changed && this._inbox?.message_send_enabled ? "" : "disabled") +
       '>Freigegebene Nachricht senden</button>' +
       '</div>';
     return html;
@@ -240,7 +257,7 @@ class MittelhofGuestCard extends HTMLElement {
       'textarea{min-height:80px}.checkbox{flex-direction:row;align-items:center}.checkbox input{width:auto}' +
       'button{cursor:pointer;border:1px solid var(--divider-color);border-radius:7px;padding:9px;background:var(--secondary-background-color);color:var(--primary-text-color)}' +
       'button:disabled{opacity:.45;cursor:not-allowed}.actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}.send{border-color:var(--success-color,#2a8)}' +
-      '.warning{border-left:3px solid #c9943c;padding:8px;color:var(--primary-text-color)}.logo{max-width:220px;max-height:90px;object-fit:contain}' +
+      '.preflight{border:1px solid var(--divider-color);padding:10px;border-radius:8px;margin:10px 0}.warning{border-left:3px solid #c9943c;padding:8px;color:var(--primary-text-color)}.logo{max-width:220px;max-height:90px;object-fit:contain}' +
       '@media(max-width:850px){.layout,.edit-grid{grid-template-columns:1fr}.thread-list{max-height:240px}}' +
       '</style><ha-card><header><h2>Gäste & Rechnungsentwürfe</h2>' +
       '<button data-op="refresh" ' + (this._busy ? "disabled" : "") + '>Aktualisieren</button></header>' +
