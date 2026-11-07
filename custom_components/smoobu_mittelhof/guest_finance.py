@@ -96,6 +96,62 @@ def normalize_lines(raw: Any) -> list[dict[str, str]]:
     return lines
 
 
+def compose_message(context: dict[str, Any], invoice: dict[str, Any]) -> dict[str, str]:
+    """Explicitly regenerate a guest message from a reviewed invoice draft.
+
+    Never claim payment based solely on OTA channel or Smoobu's price-paid marker.
+    """
+    is_english = str(context.get("language") or "").casefold().startswith("en")
+    guest = str(context.get("guest") or "").strip()
+    house = str(context.get("house") or "").strip()
+    arrival = str(context.get("arrival") or "")
+    departure = str(context.get("departure") or "")
+    gross = decimal_money(invoice["total_gross"])
+    paid = decimal_money(invoice["paid_amount"])
+    outstanding = decimal_money(Decimal(gross) - Decimal(paid))
+    verified = invoice.get("payment_verified") is True
+    flow = invoice.get("payment_flow")
+    due = str(invoice.get("due_date") or "").strip()
+    note = str(invoice.get("payment_note") or "").strip()
+    if is_english:
+        intro = (f"Dear {guest or 'guest'},\n\nThank you for booking "
+                 f"{house or 'our accommodation'} from {arrival} to {departure}.\n\n")
+        if verified and Decimal(outstanding) == 0:
+            payment = "The accommodation amount has been recorded as paid. No additional transfer is requested."
+        elif flow == "guest_invoice" and verified and due and note:
+            payment = (f"Invoice amount: {gross} EUR. Amount already paid: {paid} EUR. "
+                       f"Remaining amount: {outstanding} EUR. Please pay by {due}.\n{note}")
+        elif flow == "platform" and verified:
+            payment = ("Your platform payment is recorded as follows: " +
+                       f"{paid} EUR paid, {outstanding} EUR outstanding. "
+                       "Any further payment arrangement will be communicated separately.")
+        else:
+            payment = ("Payment handling is being checked. We will contact you separately "
+                       "if any amount is still due.")
+        closing = "\n\nKind regards,\nYour host team"
+        subject = "Your stay – booking information"
+    else:
+        intro = (f"Guten Tag {guest or 'lieber Gast'},\n\nvielen Dank für Ihre Buchung von "
+                 f"{house or 'unserer Unterkunft'} ({arrival} bis {departure}).\n\n")
+        if verified and Decimal(outstanding) == 0:
+            payment = ("Der Rechnungsbetrag wurde als bezahlt bestätigt. "
+                       "Eine zusätzliche Überweisung ist nicht erforderlich.")
+        elif flow == "guest_invoice" and verified and due and note:
+            payment = (f"Rechnungsbetrag: {gross} €. Bereits bezahlt: {paid} €. "
+                       f"Noch zu zahlen: {outstanding} €. Bitte überweisen Sie bis {due}.\n{note}")
+        elif flow == "platform" and verified:
+            payment = (f"Für die Plattformzahlung wurden {paid} € als bezahlt bestätigt. "
+                       f"Offener Betrag: {outstanding} €. Eine etwaige weitere Zahlungsabwicklung "
+                       "teilen wir Ihnen gesondert mit.")
+        else:
+            payment = ("Die Zahlungsabwicklung wird derzeit geprüft. "
+                       "Falls noch eine Zahlung erforderlich ist, erhalten Sie "
+                       "eine gesonderte Nachricht.")
+        closing = "\n\nMit freundlichen Grüßen\nIhr Gastgeberteam"
+        subject = "Ihr Aufenthalt – Buchungsinformationen"
+    return {"subject": subject, "body": intro + payment + closing}
+
+
 def make_draft(booking: dict[str, Any]) -> dict[str, Any]:
     booking_id = str(booking.get("id") or "").strip()
     if not booking_id.isdigit() or int(booking_id) < 1:
@@ -105,15 +161,8 @@ def make_draft(booking: dict[str, Any]) -> dict[str, Any]:
     guest = str(booking.get("guest-name") or "").strip()
     house = str((booking.get("apartment") or {}).get("name") or "")
     arrival, departure = str(booking.get("arrival") or ""), str(booking.get("departure") or "")
-    text = (
-        f"Guten Tag {guest or 'lieber Gast'},\n\n"
-        f"vielen Dank für Ihre Buchung von {house or 'unserer Unterkunft'} "
-        f"({arrival} bis {departure}).\n\n"
-        "Wir bereiten Ihre Buchungsunterlagen vor. Die Zahlungsabwicklung "
-        "wird derzeit geprüft. Eine etwaige Zahlungsaufforderung erhalten "
-        "Sie nach gesonderter Bestätigung.\n\n"
-        "Mit freundlichen Grüßen\nIhr Gastgeberteam"
-    )
+    context = {"guest": guest, "house": house, "arrival": arrival,
+               "departure": departure, "language": str(booking.get("language") or "de")}
     elements = booking.get("priceElements")
     lines = []
     if isinstance(elements, list):
@@ -128,8 +177,12 @@ def make_draft(booking: dict[str, Any]) -> dict[str, Any]:
     if not lines:
         lines = [{"description": f"Aufenthalt {house} {arrival}–{departure}", "gross": amount, "tax_rate": ""}]
     now = utc_now()
+    provisional_invoice = {"total_gross": amount, "paid_amount": "0.00",
+                           "payment_verified": False, "payment_flow": "unverified"}
+    message = compose_message(context, provisional_invoice)
     return {
         "booking_id": booking_id,
+        "booking_context": context,
         "revision": 1,
         "created_at": now,
         "updated_at": now,
@@ -151,8 +204,8 @@ def make_draft(booking: dict[str, Any]) -> dict[str, Any]:
             "line_items": lines,
             "logo_asset": "configured_local_logo",
         },
-        "message": {"status": "draft", "subject": "Ihre Buchung – Informationen",
-                    "body": text, "approved_revision": None},
+        "message": {"status": "draft", "subject": message["subject"],
+                    "body": message["body"], "approved_revision": None},
         "audit": [{"at": now, "event": "prepared"}],
     }
 
