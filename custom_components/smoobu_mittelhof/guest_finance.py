@@ -26,6 +26,15 @@ INVOICE_EDITABLE = {
     "line_items", "payment_verified",
 }
 MESSAGE_EDITABLE = {"subject", "body"}
+POSITION_NAMES = {
+    "rent": "Miete",
+    "cleaning": "Reinigung",
+    "extra_person": "Zusätzliche Person",
+    "dog": "Hund",
+    "stay_discount": "Nachlass aufgrund der Mietdauer",
+}
+POSITION_LIMITS = {"rent": 1, "cleaning": 1, "extra_person": 2, "dog": 2, "stay_discount": 1}
+
 
 
 def utc_now() -> str:
@@ -78,11 +87,10 @@ def classify_channel(channel: str) -> str:
     return "unknown"
 
 
-def normalize_lines(raw: Any) -> list[dict[str, str]]:
-    if not isinstance(raw, list):
-        raise ValueError("Rechnungspositionen müssen eine Liste sein")
-    if len(raw) > 50:
-        raise ValueError("Zu viele Rechnungspositionen")
+def normalize_lines(raw: Any) -> list[dict[str, Any]]:
+    """Keep legacy Smoobu positions editable; require explicit type for export."""
+    if not isinstance(raw, list) or len(raw) > 50:
+        raise ValueError("1 bis 50 Rechnungspositionen als Liste erwartet")
     lines = []
     for item in raw:
         if not isinstance(item, dict):
@@ -90,12 +98,71 @@ def normalize_lines(raw: Any) -> list[dict[str, str]]:
         label = str(item.get("description") or "").strip()
         if not label or len(label) > 250:
             raise ValueError("Positionsbezeichnung fehlt oder ist zu lang")
-        lines.append({
+        kind = str(item.get("position_type") or "").strip()
+        if kind and kind not in POSITION_NAMES:
+            raise ValueError("Unbekannte Mittelhof-Leistungsart")
+        qty = item.get("quantity", 1)
+        if type(qty) is not int or qty < 1 or qty > 2:
+            raise ValueError("Menge muss 1 oder 2 sein")
+        rule = item.get("discount_rule") or ""
+        if not isinstance(rule, str) or len(rule) > 250:
+            raise ValueError("Mietdauerrabatt-Regel zu lang")
+        discount_nights = item.get("discount_nights")
+        if discount_nights is not None and (
+            type(discount_nights) is not int or discount_nights < 1 or discount_nights > 365
+        ):
+            raise ValueError("Rabattnächte ungültig")
+        row = {
             "description": label,
             "gross": signed_line_money(item.get("gross", "0.00")),
-            "tax_rate": str(item.get("tax_rate") or "").strip(),  # empty = unresolved
-        })
+            "tax_rate": str(item.get("tax_rate") or "").strip(),
+            "position_type": kind,
+            "quantity": qty,
+        }
+        if kind == "stay_discount":
+            row["discount_rule"] = rule.strip()
+            row["discount_nights"] = discount_nights
+        lines.append(row)
     return lines
+
+
+def validate_mittelhof_positions(lines: Any, arrival: str, departure: str) -> None:
+    """Only the five operator-defined categories, 7% and confirmed discount."""
+    normalized = normalize_lines(lines)
+    if not normalized or len(normalized) > 20:
+        raise ValueError("Mindestens eine und maximal 20 Mittelhof-Positionen erforderlich")
+    try:
+        nights = (date.fromisoformat(departure) - date.fromisoformat(arrival)).days
+    except (ValueError, TypeError) as exc:
+        raise ValueError("Aufenthaltsdaten für Mietdauerrabatt fehlen") from exc
+    if nights < 1:
+        raise ValueError("Aufenthaltsdauer ungültig")
+    seen: dict[str, int] = {}
+    for item in normalized:
+        kind = item["position_type"]
+        if kind not in POSITION_NAMES:
+            raise ValueError("Position ohne bestätigte Mittelhof-Leistungsart")
+        seen[kind] = seen.get(kind, 0) + item["quantity"]
+        if seen[kind] > POSITION_LIMITS[kind]:
+            raise ValueError(POSITION_NAMES[kind] + ": maximale Anzahl überschritten")
+        try:
+            rate = Decimal(item["tax_rate"])
+        except (ValueError, TypeError, InvalidOperation) as exc:
+            raise ValueError("Steuersatz jeder Position muss 7 % sein") from exc
+        if rate != Decimal("7"):
+            raise ValueError("Mittelhof-Leistungsarten nur mit 7 % ausgewiesen")
+        value = Decimal(item["gross"])
+        if kind == "stay_discount":
+            if value >= 0:
+                raise ValueError("Mietdauernachlass muss negativ sein")
+            if item.get("discount_nights") != nights:
+                raise ValueError("Mietdauernachlass: Aufenthaltsnächte nicht bestätigt")
+            if len(str(item.get("discount_rule") or "").strip()) < 8:
+                raise ValueError("Mietdauernachlass: gültige Rabattstaffel/Regel fehlt")
+        elif value <= 0:
+            raise ValueError("Mittelhof-Leistungsposition muss positiv sein")
+    if seen.get("rent") != 1:
+        raise ValueError("Eine Mietposition ist zwingend erforderlich")
 
 
 def compose_message(context: dict[str, Any], invoice: dict[str, Any]) -> dict[str, str]:
@@ -342,14 +409,13 @@ def request_invoice_demo_preview(draft: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("Zahlungsweg und Zahlungsstatus müssen manuell bestätigt sein")
     if invoice.get("payment_flow") == "guest_invoice" and not invoice.get("due_date"):
         raise ValueError("Überweisungsrechnung benötigt Zahlungsziel")
-    # These rates are only test-engine categories; final VAT determination is separate.
-    for line in invoice.get("line_items") or []:
-        try:
-            rate = Decimal(str(line.get("tax_rate")))
-        except (ValueError, InvalidOperation, TypeError) as exc:
-            raise ValueError("Steuersatz jeder Position muss bestätigt sein") from exc
-        if rate not in (Decimal("7"), Decimal("19")):
-            raise ValueError("Testengine akzeptiert derzeit nur 7 oder 19 Prozent")
+    context = updated.get("booking_context") or {}
+    validate_mittelhof_positions(
+        invoice.get("line_items"),
+        str(context.get("arrival") or ""),
+        str(context.get("departure") or ""),
+    )
+
     previous = updated.get("invoice_review") or {}
     if previous.get("state") == "requested" and previous.get("requested_revision") == updated["revision"]:
         return updated
