@@ -52,6 +52,11 @@ class TestProductionUpgradeSafety(unittest.TestCase):
             else:
                 self.assertIn(f"default=options.get({field.group(1)},", line, line)
 
+    def test_opening_options_cannot_change_laundry_tracking_start(self):
+        flow = (MODULES / "config_flow.py").read_text(encoding="utf-8")
+        self.assertIn("default=options.get(CONF_LAUNDRY_TRACKING_START, DEFAULT_LAUNDRY_TRACKING_START)", flow)
+        self.assertNotIn('options[CONF_LAUNDRY_TRACKING_START] = DEFAULT_LAUNDRY_TRACKING_START', flow)
+
     def test_local_config_dir_is_never_forcibly_migrated(self):
         init = (MODULES / "__init__.py").read_text(encoding="utf-8")
         self.assertIn('options[CONF_CONFIG_DIRECTORY] = "smoobu_mittelhof"', init)
