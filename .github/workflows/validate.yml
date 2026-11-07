@@ -22,6 +22,8 @@ jobs:
         run: python tests/test_statistics.py
       - name: Test guest invoice draft revisions and payment handling
         run: python tests/test_guest_finance.py
+      - name: Test Smoobu guest API contract offline
+        run: python tests/test_guest_api_contract.py
 
   frontend-syntax:
     runs-on: ubuntu-latest
