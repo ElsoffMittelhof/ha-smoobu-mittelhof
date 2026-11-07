@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 from copy import deepcopy
+from datetime import date, timedelta
 from typing import Any
 
 from aiohttp import web
@@ -308,7 +309,16 @@ def register_guest_views(hass: HomeAssistant) -> None:
 
 async def sync_guest_drafts(runtime) -> None:
     """Prepare future/active bookings from existing HA polling; never send."""
-    bookings = valid_bookings(runtime.coordinator.data or [], runtime.houses)
+    # Broader than the calendar horizon so a reservation 12+ months ahead is prepared.
+    # Failure must not interrupt the already installed Smoobu/laundry/NUKI workflows.
+    today = date.today()
+    try:
+        source = await runtime.api.get_reservations(
+            today - timedelta(days=30), today + timedelta(days=730)
+        )
+    except Exception:
+        source = runtime.coordinator.data or []
+    bookings = valid_bookings(source, runtime.houses)
     for booking in bookings:
         if booking.get("is-blocked-booking"):
             continue
