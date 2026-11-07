@@ -68,6 +68,12 @@ class MittelhofGuestCard extends HTMLElement {
   async _prepare() {
     if (!this._selected) return;
     if (this._hasUnsaved && !window.confirm("Ungespeicherte Änderungen verwerfen?")) return;
+    if (this._selected.source_changed && !window.confirm(
+      "Smoobu hat Buchungsdaten geändert (aktueller Buchungsbetrag: " +
+      this._selected.booking.price +
+      " €). Die vorhandenen Rechnungspositionen werden NICHT überschrieben. " +
+      "Bitte die Entwurfsbeträge anschließend selbst kontrollieren."
+    )) return;
     await this._run(async () => {
       this._hasUnsaved = false;
       const id = this._selected.booking.id;
@@ -138,6 +144,9 @@ class MittelhofGuestCard extends HTMLElement {
   async _action(action) {
     const d = this._selected?.draft;
     if (!d || this._hasUnsaved) return;
+    if (action === "regenerate" && !window.confirm(
+      "Die Nachricht aus den gespeicherten Zahlungsdaten neu erzeugen? Ein bisheriger Nachrichtentext wird ersetzt."
+    )) return;
     if (action === "send" && !window.confirm(
       "Die freigegebene Nachricht jetzt wirklich über Smoobu an den Gast senden? " +
       "Ein Rechnungs-PDF wird NICHT angehängt."
@@ -234,6 +243,9 @@ class MittelhofGuestCard extends HTMLElement {
       '</section></div><div class="actions">' +
       '<button data-op="prepare">Mit aktuellem Buchungsstand abgleichen</button>' +
       '<button data-op="save">Änderungen speichern</button>' +
+      '<button data-op="regenerate" ' +
+      (msg.status === "draft" && !selected.source_changed ? "" : "disabled") +
+      '>Nachricht aus Zahlungsdaten erzeugen</button>' +
       '<button data-op="approve" ' + (msg.status === "draft" && !selected.source_changed ? "" : "disabled") +
       '>Nachricht freigeben</button>' +
       '<button class="send" data-op="send" ' + (msg.status === "approved" && !selected.source_changed && this._inbox?.message_send_enabled ? "" : "disabled") +
@@ -267,7 +279,7 @@ class MittelhofGuestCard extends HTMLElement {
     this.shadowRoot.querySelectorAll('[data-field]').forEach((el) =>
       el.addEventListener("input", () => {
         this._hasUnsaved = true;
-        for (const op of ["approve", "send"]) {
+        for (const op of ["regenerate", "approve", "send"]) {
           const button = this.shadowRoot.querySelector('[data-op="' + op + '"]');
           if (button) button.disabled = true;
         }
@@ -279,7 +291,8 @@ class MittelhofGuestCard extends HTMLElement {
     this.shadowRoot.querySelectorAll('[data-op]').forEach((el) =>
       el.addEventListener("click", () => {
         const actions = { refresh: () => this._loadInbox(), prepare: () => this._prepare(),
-          save: () => this._save(), approve: () => this._action("approve"), send: () => this._action("send") };
+          save: () => this._save(), regenerate: () => this._action("regenerate"),
+          approve: () => this._action("approve"), send: () => this._action("send") };
         if (actions[el.dataset.op]) actions[el.dataset.op]();
       }));
   }
