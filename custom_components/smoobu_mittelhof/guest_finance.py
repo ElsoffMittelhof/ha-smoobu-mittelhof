@@ -11,6 +11,8 @@ import hashlib
 import json
 from typing import Any
 
+from .smoobu_sources import guest_invoice_address, source_price_lines
+
 FINGERPRINT_FIELDS = (
     "id", "arrival", "departure", "channel", "guest-name", "email",
     "price", "price-paid", "prepayment", "prepayment-paid", "deposit",
@@ -297,19 +299,12 @@ def make_draft(booking: dict[str, Any]) -> dict[str, Any]:
     arrival, departure = str(booking.get("arrival") or ""), str(booking.get("departure") or "")
     context = {"guest": guest, "house": house, "arrival": arrival,
                "departure": departure, "language": str(booking.get("language") or "de")}
-    elements = booking.get("priceElements")
-    lines = []
-    if isinstance(elements, list):
-        for element in elements:
-            if not isinstance(element, dict) or element.get("priceIncludedInId"):
-                continue
-            lines.append({
-                "description": str(element.get("name") or element.get("type") or "Leistung")[:250],
-                "gross": signed_line_money(element.get("amount") or 0),
-                "tax_rate": "",
-            })
-    if not lines:
-        lines = [{"description": f"Aufenthalt {house} {arrival}–{departure}", "gross": amount, "tax_rate": ""}]
+    lines, source_warnings = source_price_lines(booking)
+    addr = booking.get("_guest_invoice_address")
+    if not isinstance(addr, dict):
+        addr = guest_invoice_address(booking, None)
+    # Never infer payment from Smoobu channel/payment status.
+
     now = utc_now()
     provisional_invoice = {"total_gross": amount, "paid_amount": "0.00",
                            "payment_verified": False, "payment_flow": "unverified"}
@@ -323,14 +318,18 @@ def make_draft(booking: dict[str, Any]) -> dict[str, Any]:
         "source_fingerprint": booking_fingerprint(booking),
         "source_channel": channel,
         "source_channel_class": classify_channel(channel),
+        "source_import_warnings": source_warnings,
         "invoice": {
             "status": "draft",
-            "recipient_name": guest,
-            "recipient_address": "",
-            "recipient_street": "",
-            "recipient_postal_code": "",
-            "recipient_city": "",
-            "recipient_country": "",
+            "recipient_name": addr.get("recipient_name") or guest,
+            "recipient_address": ", ".join(x for x in [
+                addr.get("recipient_street"), addr.get("recipient_postal_code"),
+                addr.get("recipient_city"), addr.get("recipient_country"),
+            ] if x),
+            "recipient_street": addr.get("recipient_street") or "",
+            "recipient_postal_code": addr.get("recipient_postal_code") or "",
+            "recipient_city": addr.get("recipient_city") or "",
+            "recipient_country": addr.get("recipient_country") or "",
             "description": f"Übernachtung {house}, {arrival}–{departure}",
             "total_gross": amount,
             "paid_amount": "0.00",  # never infer paid from channel
