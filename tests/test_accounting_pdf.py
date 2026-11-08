@@ -84,6 +84,12 @@ class AccountingTest(unittest.TestCase):
         self.assertIn(b"/Count 5", pdf) if False else self.assertIn(b"/Count ", pdf)
         self.assertGreater(pdf.count(b"/Type /Page "),1)
 
+    def test_foreign_currency_never_becomes_fictitious_eur(self):
+        booking = sample()
+        booking["priceElements"][0]["currencyCode"] = "USD"
+        with self.assertRaisesRegex(ValueError, "Fremdwährung"):
+            core.prepare_booking(booking, "Haus Test")
+
     def test_reject_blocked_and_non_cent(self):
         b=sample();b["is-blocked-booking"]=True
         with self.assertRaises(ValueError): core.prepare_booking(b,"Haus Test")
