@@ -78,8 +78,10 @@ class GuestInboxState:
                 if match is not None and str(match.get("type")) == "1":
                     pending[bid] = latest
                 elif match is not None:
+                    # A newer outgoing message must never mark an older
+                    # unacknowledged guest message as read. Only opening
+                    # the conversation clears the pending guest marker.
                     last_seen[bid] = latest
-                    pending.pop(bid, None)
             new_ids = [d for d in drafts
                        if str(d.get("booking_id") or "").isdigit()
                        and str(d.get("booking_id") or "") not in seen_bookings]
