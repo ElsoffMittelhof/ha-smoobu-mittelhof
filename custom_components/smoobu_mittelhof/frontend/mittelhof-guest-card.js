@@ -28,16 +28,23 @@ class MittelhofGuestCard extends HTMLElement {
     this._hass = value;
     if (!this._loaded) {
       this._loaded = true;
-      this._loadInbox();
-      if (this._tab === "bookings") this._loadBookings();
-      if (this._tab === "invoices") this._loadInvoiceDrafts();
       const params = new URLSearchParams(window.location.search);
       const bid = String(params.get("booking_id") || "");
       if (/^\d{1,18}$/.test(bid)) {
         this._tab = params.get("mode") === "invoices" ? "invoices" : "bookings";
-        this._open(bid);
       }
+      // The shared _run() guard intentionally serializes operations. Loading
+      // all three views concurrently used to drop booking/invoice requests and
+      // timeline deep links on a cold dashboard load.
+      void this._initialize(bid);
     }
+  }
+
+  async _initialize(bid) {
+    await this._loadInbox(); // also establishes the non-destructive read baseline
+    if (this._tab === "bookings") await this._loadBookings();
+    else if (this._tab === "invoices") await this._loadInvoiceDrafts();
+    if (/^\d{1,18}$/.test(bid)) await this._open(bid);
   }
 
   getCardSize() { return 8; }
