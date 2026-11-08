@@ -28,6 +28,10 @@ jobs:
         run: python tests/test_invoice_numbers.py
       - name: Test production 0.6.8 upgrade compatibility and strict opt-in defaults
         run: python tests/test_production_upgrade.py
+      - name: Test Smoobu screenshot price/country import
+        run: python tests/test_smoobu_sources.py
+      - name: Test guest center separation and inbox/archive contracts
+        run: python tests/test_guest_center_contract.py
 
   frontend-syntax:
     runs-on: ubuntu-latest
