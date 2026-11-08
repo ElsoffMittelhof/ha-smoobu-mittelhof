@@ -767,12 +767,23 @@ class MittelhofGuestCard extends HTMLElement {
       'button{cursor:pointer;border:1px solid var(--divider-color);border-radius:7px;padding:9px;background:var(--secondary-background-color);color:var(--primary-text-color)}' +
       'button:disabled{opacity:.45;cursor:not-allowed}.actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}.send{border-color:var(--success-color,#2a8)}' +
       '.invoice-preview{border:1px solid var(--divider-color);padding:18px;margin:15px 0;border-radius:9px;max-width:700px;background:var(--card-background-color)}.invoice-head{display:flex;justify-content:space-between;align-items:center;gap:14px;margin-bottom:20px;flex-wrap:wrap}.invoice-head div{display:flex;flex-direction:column;gap:4px}.invoice-head small,.invoice-preview small{color:var(--secondary-text-color)}.invoice-logo{max-width:180px;max-height:90px;object-fit:contain}.invoice-recipient{display:flex;flex-direction:column;margin:12px 0 20px;gap:4px}.multiline{white-space:pre-wrap;overflow-wrap:anywhere}.invoice-preview table{width:100%;border-collapse:collapse}.invoice-preview th{text-align:left;font-size:12px}.invoice-preview td,.invoice-preview th{border-bottom:1px solid var(--divider-color);padding:7px 4px}.invoice-preview .money{text-align:right}.invoice-totals{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:15px 0}.invoice-totals div{display:flex;flex-direction:column;gap:4px}.preflight{border:1px solid var(--divider-color);padding:10px;border-radius:8px;margin:10px 0}.warning{border-left:3px solid #c9943c;padding:8px;color:var(--primary-text-color)}.logo{max-width:220px;max-height:90px;object-fit:contain}' +
+      '.tabs{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}.tabs .active{font-weight:bold;border-bottom:3px solid var(--primary-color)}.search-dates{display:flex;gap:7px;flex-wrap:wrap}.search-dates label{flex:1;min-width:110px}' +
       '@media(max-width:850px){.layout,.edit-grid{grid-template-columns:1fr}.thread-list{max-height:240px}}' +
-      '</style><ha-card><header><h2>Gäste & Rechnungsentwürfe</h2>' +
+      '</style><ha-card><header><h2>Gästeverwaltung Mittelhof</h2>' +
       '<button data-op="refresh" ' + (this._busy ? "disabled" : "") + '>Aktualisieren</button></header>' +
       (this._error ? '<p class="warning" role="alert">' + esc(this._error) + '</p>' : '') +
+      '<nav class="tabs" aria-label="Gästebereich">' +
+      [["inbox","Posteingang"],["bookings","Buchungen"],["invoices","Rechnungen"]].map(([key,label]) =>
+        '<button data-tab="' + key + '" class="' + (this._tab === key ? "active" : "") +
+        '">' + label + '</button>').join("") + '</nav>' +
       '<div class="layout"><aside>' + this._renderInbox() + '</aside><main>' +
-      this._renderBooking() + '</main></div></ha-card>';
+      (this._tab === "invoices" ? this._renderBooking() : this._renderConversation()) +
+      '</main></div></ha-card>';
+    this.shadowRoot.querySelectorAll("[data-tab]").forEach((el) =>
+      el.addEventListener("click", () => this._selectTab(el.dataset.tab)));
+    this.shadowRoot.querySelector("[data-search-text]")?.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {event.preventDefault(); this._applySearch();}
+    });
     this.shadowRoot.querySelectorAll('[data-field]').forEach((el) =>
       el.addEventListener("input", () => this._markUnsaved()));
     this.shadowRoot.querySelectorAll('[data-remove-position]').forEach((el) =>
@@ -798,8 +809,13 @@ class MittelhofGuestCard extends HTMLElement {
       el.addEventListener("click", () => this._open(el.dataset.booking)));
     this.shadowRoot.querySelectorAll('[data-op]').forEach((el) =>
       el.addEventListener("click", () => {
-        const actions = { refresh: () => this._loadInbox(), prepare: () => this._prepare(),
-          save: () => this._save(), "preview-request": () => this._requestDemoInvoicePreview(),
+        const actions = { refresh: () => this._refreshCurrent(), prepare: () => this._prepare(),
+          save: () => this._save(), "save-message": () => this._saveMessage(),
+          "search-bookings": () => this._loadBookingsFromInput(),
+          filter: () => this._applySearch(),
+          "go-invoice": () => this._selectTab("invoices").then(() => this._openSelectedInvoice()),
+          "import-smoobu": () => this._importSmoobu(),
+          "preview-request": () => this._requestDemoInvoicePreview(),
           "invoice-export": () => this._exportInvoiceDraft(),
           "demo-build": () => this._invoiceServiceAction("build"),
           "demo-verify": () => this._invoiceServiceAction("verify"),
