@@ -115,8 +115,13 @@ def source_price_lines(booking: dict) -> tuple[list[dict], list[str]]:
         elements = []
     warnings: list[str] = []
     rows = []
-    for el in sorted((x for x in elements if isinstance(x, dict)),
-                     key=lambda item: (int(item.get("sortOrder") or 0), str(item.get("id") or ""))):
+    def order(item):
+        try:
+            n = int(item.get("sortOrder") or 0)
+        except (ValueError, TypeError):
+            n = 0
+        return n, str(item.get("id") or "")
+    for el in sorted((x for x in elements if isinstance(x, dict)), key=order):
         if el.get("priceIncludedInId") is not None:
             continue
         kind = classification(el)
@@ -130,7 +135,7 @@ def source_price_lines(booking: dict) -> tuple[list[dict], list[str]]:
             warnings.append(f"Unplausible Menge bei {desc}; manuell prüfen")
         gross = _money(el.get("amount"))
         # Never unilaterally promote a provider tax to 7%. Let user review.
-        vat = ""
+        vat = "7" if kind in ("rent", "cleaning", "dog", "extra_person", "stay_discount") and currency == "EUR" else ""
         if not kind:
             warnings.append(f"Unbekannte Leistungsart: {desc} – manuell zuordnen")
         row = {"description": desc,"gross": gross,"tax_rate": vat,
