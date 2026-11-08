@@ -195,7 +195,15 @@ class GuestDraftRepository:
                 return
             if len(current.get("audit") or []) != 1 or current["audit"][0].get("event") != "prepared":
                 return
-            if current.get("source_fingerprint") != booking_fingerprint(booking):
+            # Old drafts were seeded from Smoobu list rows (without detail-only
+            # price-details). Avoid a false change flag when opening the full
+            # booking if the core booking values still match.
+            context = current.get("booking_context") or {}
+            if (context.get("arrival") != booking.get("arrival") or
+                    context.get("departure") != booking.get("departure") or
+                    context.get("guest") != booking.get("guest-name") or
+                    str(current["invoice"].get("total_gross")) !=
+                    str(__import__("decimal").Decimal(str(booking.get("price"))).quantize(__import__("decimal").Decimal("0.01")))):
                 return
             fresh = make_draft(booking)
             if fresh["invoice"]["line_items"] == current["invoice"]["line_items"] and (
