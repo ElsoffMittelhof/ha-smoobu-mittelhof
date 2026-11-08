@@ -1,4 +1,4 @@
-"""Non-network production-upgrade contract checks (0.6.8 -> 0.7.0).
+"""Non-network production-upgrade contract checks (0.6.8 -> 0.7.1).
 
 Guard against accidentally changing local NUKI/laundry/SMTP options or
 enabling guest PII syncing and guest-message sending on the first upgrade.
@@ -19,7 +19,7 @@ class TestProductionUpgradeSafety(unittest.TestCase):
     def test_manifest_release_and_domain_are_stable(self):
         manifest = json.loads((MODULES / "manifest.json").read_text(encoding="utf-8"))
         self.assertEqual(manifest["domain"], "smoobu_mittelhof")
-        self.assertEqual(manifest["version"], "0.7.1rc1")
+        self.assertEqual(manifest["version"], "0.7.1")
         self.assertEqual(manifest.get("requirements"), [])
 
     def test_guest_portal_and_guest_sends_are_opt_in_disabled(self):
