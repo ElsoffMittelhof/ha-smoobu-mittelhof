@@ -2,7 +2,7 @@
 
 Custom Home Assistant integration for Smoobu reservations, booking calendars, laundry approval workflows, NUKI guest-code emails, and optional IT.NRW monthly statistics.
 
-Current public version: **0.7.2**. Existing NUKI/laundry/IT.NRW workflows remain unchanged. The guest center and new Lexware-L accounting PDF exports are opt-in, admin-only; guest messages and invoice issuance remain disabled. Read [the v0.7.2 production and rollback guide](docs/release-0.7.2-production.md) before upgrading.
+Current public version: **0.7.3**. Existing NUKI/laundry/IT.NRW workflows remain unchanged. The guest center and new Lexware-L accounting PDF exports are opt-in, admin-only; guest messages and invoice issuance remain disabled. Read [the v0.7.2 production and rollback guide](docs/release-0.7.3-production.md) before upgrading.
 
 > Technical note: the integration domain remains `smoobu_mittelhof` for compatibility with installations from the private pre-release phase. The public integration contains no property-specific apartment IDs, email addresses, Home Assistant entity IDs, API credentials, or SMTP credentials.
 
@@ -260,4 +260,9 @@ For NUKI-only checks call `smoobu_mittelhof.process_nuki_only` with `force_notif
 
 The optional administrator guest center offers a fourth **Buchhaltung** view via `custom:mittelhof-accounting-card`. Every active Smoobu booking can be reviewed for gross amount and tax lines, then exported as an internal accounting PDF or as part of a ZIP/CSV batch of up to 25 reviewed bookings. **Tax rates need explicit human review.** Smoobu payment flags are not used as confirmed payments. The document is **not** a guest invoice, does not send emails, and does not post to Lexware. After a manual Lexware L receipt upload an operator may mark the document as manually uploaded; altered source bookings block reused exports. For direct bookings where a guest invoice already documents the income, do not post the internal booking PDF as a second income. The future Lexware API adapter is not enabled on tariff L.
 
-Register exactly one JS module resource `/smoobu_mittelhof/frontend/mittelhof-accounting-card.js?v=0.7.2` and use the complete separate private guest-dashboard YAML with its fourth `Buchhaltung` view. See [release 0.7.2 instructions](docs/release-0.7.2-production.md).
+Register exactly one JS module resource `/smoobu_mittelhof/frontend/mittelhof-accounting-card.js?v=0.7.2` and use the complete separate private guest-dashboard YAML with its fourth `Buchhaltung` view. See [release 0.7.2 instructions](docs/release-0.7.3-production.md).
+
+
+## v0.7.3: Correct guest accounting and booking links
+
+Airbnb platform settlements (`Commission`, `Cancellation Host Fee`, `Cancellation Payout`) are separated from guest-price elements; `PASS_THROUGH_PET_FEE` and `Additional Guest Fee` are included in the guest gross only after amount and tax review. Booking record lines may be excluded or edited by administrators, but the final gross must always equal the Smoobu guest-booking price. For direct/TOMAS bookings the accounting list defaults to **invoice intended** rather than producing an extra booking-income PDF. Existing actually issued invoice numbers can be linked without creating a second revenue entry. Homepage payment method still requires operator choice. The private canonical guests dashboard is `dashboards/gaste-rechnungen.yaml`; all four timeline paths are `/gaste-rechnungen/buchungen`. See [v0.7.3 upgrade instructions](docs/release-0.7.3-production.md).
