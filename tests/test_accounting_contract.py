@@ -8,7 +8,7 @@ ROOT=Path(__file__).resolve().parents[1]/"custom_components/smoobu_mittelhof"
 class Contracts(unittest.TestCase):
     def test_manifest_and_disabled_guest_default(self):
         m=json.loads((ROOT/"manifest.json").read_text())
-        self.assertEqual(m["version"],"0.7.2")
+        self.assertEqual(m["version"],"0.7.3")
         const=(ROOT/"const.py").read_text()
         self.assertIn("DEFAULT_GUEST_PORTAL_ENABLED = False",const)
         self.assertIn("DEFAULT_GUEST_MESSAGE_SEND_ENABLED = False",const)
@@ -19,7 +19,7 @@ class Contracts(unittest.TestCase):
     def test_admin_guard_for_all_accounting_routes(self):
         s=(ROOT/"accounting_portal.py").read_text()
         for name in ("AccountingListView","AccountingBookingView","AccountingPdfView",
-                     "AccountingUploadView","AccountingBundleView"):
+                     "AccountingUploadView","AccountingBundleView","AccountingInvoiceReferenceView"):
             chunk=s.split("class "+name+"(",1)[1].split("\nclass ",1)[0]
             self.assertIn("requires_auth = True",chunk,name)
             self.assertIn("_accounting_runtime(request)",chunk,name)

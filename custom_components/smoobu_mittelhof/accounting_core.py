@@ -28,6 +28,44 @@ def money(value):
     return amount.quantize(Decimal("0.01"))
 
 
+# In Smoobu provider settlement amounts are *not* guest charges.
+# Match narrowly, do not silently remove an unknown price element.
+SETTLEMENT_NAMES = {
+    "commission": "platform_commission",
+    "cancellation host fee": "cancellation_settlement",
+    "cancelation host fee": "cancellation_settlement",
+    "cancellation payout": "cancellation_settlement",
+    "cancelation payout": "cancellation_settlement",
+}
+GUEST_PET_NAMES = {"pass_through_pet_fee", "passthroughpetfee", "pass through pet fee"}
+GUEST_EXTRA_NAMES = {"additional guest fee", "additionalguestfee"}
+
+
+def _source_kind(element):
+    import unicodedata
+    label = str(element.get("name") or element.get("type") or "").strip().casefold()
+    label = "".join(c for c in unicodedata.normalize("NFKD", label)
+                    if not unicodedata.combining(c))
+    key = " ".join(label.replace("-", " ").replace("_", " ").split())
+    role = SETTLEMENT_NAMES.get(key)
+    if role:
+        return role
+    if key in GUEST_PET_NAMES or key.replace(" ", "") == "passthroughpetfee":
+        return "dog"
+    if key in GUEST_EXTRA_NAMES or key.replace(" ", "") == "additionalguestfee":
+        return "extra_person"
+    return None
+
+
+def _default_document_kind(channel):
+    value = channel.casefold()
+    if "tomas" in value or "direkt" in value or "direct" in value:
+        return "invoice"
+    # Website bookings are ambiguous: bank transfer vs. card / PayPal.
+    # Require a human choice; never assume that "homepage" means invoice.
+    return "booking_record"
+
+
 def prepare_booking(booking, house):
     if booking.get("is-blocked-booking") or booking.get("type") not in (
         "reservation", "modification of booking"
@@ -39,60 +77,129 @@ def prepare_booking(booking, house):
     total = money(booking.get("price"))
     if total <= 0:
         raise ValueError("Buchungsbrutto muss positiv sein")
-    source_rows, warnings = source_price_lines(booking)
-    # Smoobu numbers are EUR booking totals; never treat foreign currency amounts as EUR.
+    originals = booking.get("priceElements")
+    if originals is not None and not isinstance(originals, list):
+        raise ValueError("Smoobu-Preispositionen sind keine Liste")
+    ignored, filtered = [], []
+    for element in originals or []:
+        if not isinstance(element, dict):
+            continue
+        # Child elements already included in parents are not additional revenue.
+        if element.get("priceIncludedInId") is not None:
+            continue
+        kind = _source_kind(element)
+        if kind in ("platform_commission", "cancellation_settlement"):
+            ignored.append({
+                "description": str(element.get("name") or element.get("type") or "")[:160],
+                "gross": str(money(element.get("amount"))),
+                "reason": kind,
+            })
+            continue
+        filtered.append(element)
+    source = dict(booking)
+    source["priceElements"] = filtered
+    source_rows, warnings = source_price_lines(source)
     if any(str(w).startswith("Nicht-EUR-Position") for w in warnings):
-        raise ValueError("Fremdwährungs-Preisposition: kein automatischer EUR-Buchhaltungsbeleg")
+        raise ValueError("Fremdwährungs-Preisposition: kein EUR-Buchhaltungsbeleg")
     rows = []
-    for row in source_rows:
+    for idx, (row, element) in enumerate(zip(source_rows, filtered, strict=False)):
+        overridden_kind = _source_kind(element)
+        if overridden_kind in ("dog", "extra_person"):
+            row = dict(row)
+            row["position_type"] = overridden_kind
+            row["tax_rate"] = "7"
+            warnings = [w for w in warnings if
+                        not (w.startswith("Unbekannte Leistungsart: ") and
+                             str(element.get("name") or element.get("type") or "") in w)]
         rows.append({
+            "source_index": idx,
             "description": str(row.get("description") or "")[:160],
             "gross": str(money(row["gross"])),
             "position_type": str(row.get("position_type") or ""),
             "suggested_tax_rate": str(row.get("tax_rate") or ""),
             "quantity": row.get("quantity", 1),
         })
+    # No priceElements: source_price_lines provides a single unclassified gross fallback.
+    if not filtered and not originals and source_rows:
+        rows = [{
+            "source_index": 0,
+            "description": str(source_rows[0].get("description") or "")[:160],
+            "gross": str(money(source_rows[0]["gross"])),
+            "position_type": "", "suggested_tax_rate": "", "quantity": 1,
+        }]
     if sum((money(r["gross"]) for r in rows), Decimal("0.00")) != total:
-        warnings.append("Positionssumme stimmt nicht mit dem Buchungsbrutto überein")
+        warnings.append("Gastpreispositionen weichen vom Buchungsbrutto ab – vor Export korrigieren")
+    channel = channel_name(booking)[:120]
     return {
         "booking_id": bid,
         "house": str(house)[:100],
         "guest": str(booking.get("guest-name") or "")[:160],
-        "channel": channel_name(booking)[:120],
+        "channel": channel,
         "arrival": str(booking.get("arrival") or "")[:10],
         "departure": str(booking.get("departure") or "")[:10],
         "total_gross": str(total),
         "source_fingerprint": booking_fingerprint(booking),
         "rows": rows,
-        "warnings": warnings,
+        "ignored_settlement_lines": ignored,
+        "suggested_document_kind": _default_document_kind(channel),
+        "warnings": list(dict.fromkeys(warnings)),
     }
 
 
-def approve_snapshot(prepared, rates):
-    """Explicit rate selection per position, even when Smoobu suggests 7%.
+def _edited_rows(prepared, edits):
+    originals = prepared["rows"]
+    if edits is None:
+        return [dict(row) for row in originals]
+    if (not isinstance(edits, list) or not 1 <= len(edits) <= 50
+            or len(edits) > len(originals)):
+        raise ValueError("1 bis 50 ausgewählte Gastpositionen zulässig")
+    used = set()
+    result = []
+    for edit in edits:
+        if not isinstance(edit, dict) or type(edit.get("source_index")) is not int:
+            raise ValueError("Belegposition ohne gültige Quellenreferenz")
+        idx = edit["source_index"]
+        if idx in used or idx < 0 or idx >= len(originals):
+            raise ValueError("Doppelte oder unbekannte Gastpreisposition")
+        used.add(idx)
+        original = originals[idx]
+        desc = str(edit.get("description") or "").strip()
+        if not desc or len(desc) > 160 or any(ord(ch) < 32 for ch in desc):
+            raise ValueError("Ungültiger Positionstext")
+        gross = money(edit.get("gross"))
+        if gross <= 0:
+            raise ValueError("Gastposition muss einen positiven Bruttobetrag haben")
+        result.append({**original, "description": desc, "gross": str(gross)})
+    return result
 
-    A nonempty warning is never silently dismissed: the admin confirms it.
+
+def approve_snapshot(prepared, rates, edits=None):
+    """An explicit, auditable operator-selected guest-price breakdown.
+
+    Provider commission/cancellation settlements never become guest revenue.
+    Deleted/edited rows are allowed only if the reviewed total still exactly
+    equals the authoritative booking gross amount.
     """
-    rows = prepared["rows"]
+    rows = _edited_rows(prepared, edits)
     if not isinstance(rates, list) or len(rows) != len(rates):
-        raise ValueError("Steuersatz für jede Position explizit auswählen")
-    out = []
-    totals = {}
+        raise ValueError("Steuersatz für jede gewählte Position ausdrücklich bestätigen")
+    out, totals = [], {}
     for row, rate in zip(rows, rates, strict=True):
         if type(rate) is not str or rate not in ALLOWED_RATES:
-            raise ValueError("Unbekannter oder nicht freigegebener Steuersatz")
+            raise ValueError("Steuersatz nicht freigegeben")
         gross = money(row["gross"])
         tax = (gross * Decimal(rate) / (Decimal("100") + Decimal(rate))).quantize(
             Decimal("0.01"), rounding=ROUND_HALF_UP
         )
         totals[rate] = totals.get(rate, Decimal("0.00")) + tax
         out.append({
+            "source_index": row["source_index"],
             "description": row["description"], "gross": str(gross),
             "tax_rate": rate, "vat_included": str(tax),
             "quantity": row["quantity"],
         })
     if sum((money(x["gross"]) for x in out), Decimal("0.00")) != money(prepared["total_gross"]):
-        raise ValueError("Smoobu-Brutto und Positionen stimmen nicht überein")
+        raise ValueError("Freigegebene Gastpositionen müssen exakt dem Smoobu-Buchungsbrutto entsprechen")
     if not prepared["arrival"] or not prepared["departure"] or not prepared["house"]:
         raise ValueError("Haus oder Aufenthaltszeitraum fehlen")
     snapshot = {key: prepared[key] for key in (
@@ -101,8 +208,21 @@ def approve_snapshot(prepared, rates):
     )}
     snapshot["rows"] = out
     snapshot["tax_totals"] = {rate: str(value) for rate, value in sorted(totals.items())}
+    snapshot["source_excluded"] = [
+        {"source_index": r["source_index"], "description": r["description"],
+         "gross": r["gross"]} for r in prepared["rows"]
+        if r["source_index"] not in {x["source_index"] for x in out}
+    ]
+    snapshot["source_changes"] = [
+        {"source_index": r["source_index"], "original_description": orig["description"],
+         "original_gross": orig["gross"]}
+        for r in out for orig in prepared["rows"]
+        if orig["source_index"] == r["source_index"] and
+        (r["description"] != orig["description"] or r["gross"] != orig["gross"])
+    ]
+    snapshot["ignored_settlement_lines"] = prepared.get("ignored_settlement_lines", [])
     snapshot["document_kind"] = "internal_booking_record"
-    snapshot["schema"] = "mittelhof.accounting.v1"
+    snapshot["schema"] = "mittelhof.accounting.v2"
     digest = sha256(json.dumps(snapshot, sort_keys=True, ensure_ascii=False,
                                separators=(",", ":")).encode("utf-8")).hexdigest()
     snapshot["sha256"] = digest

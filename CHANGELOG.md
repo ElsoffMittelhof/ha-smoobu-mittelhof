@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.7.3 — 2026-11-08 (Gäste-Buchhaltung: Portalabrechnungen und Rechnungsreferenzen)
+
+- Airbnb-Smoobu-Payload: Settlement-Positionen `Commission`, `Cancellation Host Fee` und `Cancellation Payout` fließen nicht in den Gastbruttobeleg ein. Der separat zu erfassende Provisionsbeleg wird **nicht** künstlich als Gästeumsatz erzeugt. `PASS_THROUGH_PET_FEE` und `Additional Guest Fee` werden als Gastpreispositionen erkannt. Preis-Summe muss nach Trennung exakt dem Smoobu-Buchungsbrutto entsprechen (Regression 355+55+35+30=475, statt falscher 1023,63 EUR).
+- Buchhaltungsbelegpositionen vor der Freigabe einzeln auswählen/abwählen und Beschreibung/Brutto anpassen. Jede Steuerklasse explizit wählen; geprüfte Änderungen, ausgeschlossene Zeilen und Quell-Fingerprint in revisionsgebundenem Snapshot. Unausgeglichene Beträge bleiben gesperrt. Bereits hochgeladene Dokumente werden nie still ersetzt.
+- Rechnung statt Buchungs-PDF: Direktbuchung/TOMAS werden zunächst als **Rechnung vorgesehen** gekennzeichnet. Bereits tatsächlich ausgestellte Gastrechnungen können mit externer Rechnungsreferenz erfasst werden, ohne eine zweite Lexware-Einnahme zu schaffen. Homepage-Zahlweg bleibt explizite manuelle Wahl; keine automatische Rechnungsausstellung, kein Versand und kein Lexware-API-Schreiben.
+- Bewahrt geprüfte Positionen beim erneuten Öffnen der Buchung; neue separate Karte bleibt Admin-only. Dashboard-Link auf tatsächlichen Slug `/gaste-rechnungen/buchungen` korrigiert; das private kanonische Dashboard liegt vollständig unter `dashboards/gaste-rechnungen.yaml`. Hauptdashboard bleibt vollständig erhalten.
+- Die bisherige v0.7.2 bleibt unverändert als Rollback-Release bestehen; vor Installation der vollständigen v0.7.3 sind HA-Backup, Ressourcencache-Wechsel und reale Regression vorgeschrieben.
+
 ## 0.7.2 — 2026-11-08 (Lexware-L Buchhaltungsbelege)
 
 - Neues admin-geschütztes Buchhaltungsmodul für den **manuellen Lexware-Office-L-Einnahmenbeleg-Upload**: pro aktiver Smoobu-Buchung ein validierter, revisionsgebundener Buchhaltungsfall und ein internes PDF, das ausdrücklich keine Gastrechnung und keine Zahlungsaufforderung ist.

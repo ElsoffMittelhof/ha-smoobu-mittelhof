@@ -76,8 +76,8 @@ class AccountingTest(unittest.TestCase):
 
     def test_long_document_creates_multiple_pages(self):
         p = core.prepare_booking(sample(), "Haus Test")
-        p["rows"] = ([{"description": "Zusatzleistung" + " X"*60,
-                      "gross":"1.00","quantity":1}] * 60)
+        p["rows"] = [{"source_index": i, "description": "Zusatzleistung" + " X"*60,
+                      "gross":"1.00","quantity":1} for i in range(60)]
         p["total_gross"]="60.00"
         snap=core.approve_snapshot(p,["7"]*60)
         pdf=core.render_pdf(snap)
@@ -89,6 +89,60 @@ class AccountingTest(unittest.TestCase):
         booking["priceElements"][0]["currencyCode"] = "USD"
         with self.assertRaisesRegex(ValueError, "Fremdwährung"):
             core.prepare_booking(booking, "Haus Test")
+
+    def test_airbnb_settlements_do_not_inflate_guest_gross(self):
+        b = sample()
+        b["channel"] = {"name":"Airbnb"}
+        b["priceElements"] = [
+            {"name":"Base Price","type":"basePrice","amount":355},
+            {"name":"Cancellation Host Fee","type":"addon","amount":73.63},
+            {"name":"Cancellation Payout","type":"addon","amount":401.37},
+            {"name":"Cleaning fee","type":"cleaningFee","amount":55},
+            {"name":"Commission","type":"addon","amount":73.63},
+            {"name":"PASS_THROUGH_PET_FEE","type":"addon","amount":35},
+            {"name":"Additional Guest Fee","type":"addon","amount":30},
+        ]
+        p = core.prepare_booking(b,"Haus Test")
+        self.assertEqual([x["gross"] for x in p["rows"]],
+                         ["355.00","55.00","35.00","30.00"])
+        self.assertEqual([x["position_type"] for x in p["rows"]],
+                         ["rent","cleaning","dog","extra_person"])
+        self.assertEqual(len(p["ignored_settlement_lines"]),3)
+        self.assertEqual(p["warnings"],[])
+        snap=core.approve_snapshot(p,["7"]*4)
+        self.assertEqual(snap["total_gross"],"475.00")
+        self.assertEqual(sum(Decimal(r["gross"]) for r in snap["rows"]),Decimal("475.00"))
+        self.assertEqual(len(snap["ignored_settlement_lines"]),3)
+        self.assertIn(b"475.00",core.render_pdf(snap))
+
+    def test_manual_description_amount_and_deleted_rows_are_validated(self):
+        p=core.prepare_booking(sample(),"Haus Test")
+        edits=[
+            {"source_index":0,"description":"Übernachtung","gross":"390.00"},
+            {"source_index":1,"description":"Reinigung","gross":"55.00"},
+            {"source_index":3,"description":"Zusätzliche Person","gross":"30.00"},
+        ]
+        snap=core.approve_snapshot(p,["7","7","7"],edits)
+        self.assertEqual(snap["total_gross"],"475.00")
+        self.assertEqual(len(snap["rows"]),3)
+        self.assertEqual(snap["source_excluded"][0]["source_index"],2)
+        self.assertEqual(snap["source_changes"][0]["original_gross"],"355.00")
+        invalid=[dict(x) for x in edits]
+        invalid[0]["gross"]="389.00"
+        with self.assertRaises(ValueError):
+            core.approve_snapshot(p,["7"]*3,invalid)
+        with self.assertRaises(ValueError):
+            core.approve_snapshot(p,["7"]*4,edits+[edits[0]])
+        with self.assertRaises(ValueError):
+            core.approve_snapshot(p,["7"],[{"source_index":100,"description":"Fake","gross":"475.00"}])
+
+    def test_direct_and_tomas_invoice_routing_no_assumed_homepage_payment(self):
+        b=sample()
+        for channel in ("TOMAS","Direktbuchung"):
+            b["channel"]={"name":channel}
+            self.assertEqual(core.prepare_booking(b,"Haus Test")["suggested_document_kind"],"invoice")
+        b["channel"]={"name":"Homepage"}
+        self.assertEqual(core.prepare_booking(b,"Haus Test")["suggested_document_kind"],"booking_record")
 
     def test_reject_blocked_and_non_cent(self):
         b=sample();b["is-blocked-booking"]=True

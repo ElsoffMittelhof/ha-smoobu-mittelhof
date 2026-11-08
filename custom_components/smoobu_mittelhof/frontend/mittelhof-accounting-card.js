@@ -10,6 +10,7 @@ class MittelhofAccountingCard extends HTMLElement {
     this._records = [];
     this._error = "";
     this._busy = false;
+    this._documentKind = "booking_record";
   }
   setConfig(config) { this._config = config || {}; }
   set hass(hass) {
@@ -40,19 +41,51 @@ class MittelhofAccountingCard extends HTMLElement {
   async _open(id) {
     await this._run(async()=>{
       this._selected=await this._api("GET","bookings/"+encodeURIComponent(id)+"/accounting");
+      this._documentKind=this._selected.record?.document_kind||this._selected.source.suggested_document_kind||"booking_record";
     });
+  }
+  _selectedEdits() {
+    return [...this.shadowRoot.querySelectorAll("[data-line]")].filter(el =>
+      el.querySelector("[data-include]")?.checked).map(el => ({
+      source_index: Number(el.dataset.line),
+      description: el.querySelector("[data-description]").value.trim(),
+      gross: el.querySelector("[data-gross]").value.trim(),
+      tax_rate: el.querySelector("[data-rate]").value
+    }));
   }
   async _review() {
     const current=this._selected;
-    if(!current || current.source_changed)return;
-    const rates=Array.from(this.shadowRoot.querySelectorAll("[data-rate]")).map(x=>x.value);
-    if(rates.length!==current.source.rows.length) {this._error="Steuersätze unvollständig";this._render();return;}
-    if(!window.confirm("Alle Steuersätze fachlich geprüft? Der interne Buchhaltungsbeleg ist keine Gastrechnung."))return;
+    if(!current||current.source_changed||this._documentKind!=="booking_record")return;
+    const edits=this._selectedEdits();
+    if(!edits.length || edits.some(x=>!x.tax_rate)) {
+      this._error="Mindestens eine Gastposition mit geprüftem Steuersatz erforderlich";
+      this._render();return;
+    }
+    if(!window.confirm("Gastpositionen, Änderungen und sämtliche Umsatzsteuersätze geprüft? Es wird KEINE Gastrechnung erstellt."))return;
     await this._run(async()=>{
       const id=current.source.booking_id;
       await this._api("POST","bookings/"+id+"/accounting",{
         source_fingerprint:current.source.source_fingerprint,
-        rates, confirm_warnings:true, confirm_tax_review:true,
+        document_kind:"booking_record",
+        edits:edits.map(({tax_rate,...rest})=>rest),
+        rates:edits.map(x=>x.tax_rate),
+        confirm_warnings:true,confirm_tax_review:true
+      });
+      this._selected=await this._api("GET","bookings/"+id+"/accounting");
+      this._records=(await this._api("GET","accounting")).records||[];
+    });
+  }
+  async _referenceInvoice() {
+    const current=this._selected;
+    if(!current||current.source_changed||this._documentKind!=="invoice")return;
+    const ref=this.shadowRoot.querySelector("[data-invoice-ref]")?.value?.trim()||"";
+    if(!ref){this._error="Externe Rechnungsnummer oder Belegreferenz fehlt";this._render();return;}
+    if(!window.confirm("Diese Rechnung ist bereits tatsächlich ausgestellt und in der Buchhaltung erfasst? Es wird hier keine Rechnung erzeugt."))return;
+    await this._run(async()=>{
+      const id=current.source.booking_id;
+      await this._api("POST","bookings/"+id+"/accounting/invoice-reference",{
+        source_fingerprint:current.source.source_fingerprint,
+        invoice_reference:ref,confirm_existing_invoice:true
       });
       this._selected=await this._api("GET","bookings/"+id+"/accounting");
       this._records=(await this._api("GET","accounting")).records||[];
@@ -60,7 +93,7 @@ class MittelhofAccountingCard extends HTMLElement {
   }
   async _download() {
     const selected=this._selected;
-    if(!selected || selected.source_changed)return;
+    if(!selected || selected.source_changed || selected.record?.document_kind==="invoice")return;
     await this._run(async()=>{
       const result=await this._api("GET","bookings/"+selected.source.booking_id+"/accounting/pdf");
       const raw=atob(result.pdf_base64);
@@ -76,7 +109,7 @@ class MittelhofAccountingCard extends HTMLElement {
   async _downloadBundle() {
     const visible=new Set((this._search?.bookings||[]).map(x=>String(x.booking_id)));
     const ids=this._records.filter(x=>visible.has(x.booking_id)&&
-      ["ready","uploaded_manually"].includes(x.status)).map(x=>x.booking_id).slice(0,25);
+      ["ready","uploaded_manually"].includes(x.status) && x.document_kind!=="invoice").map(x=>x.booking_id).slice(0,25);
     if(!ids.length){this._error="Keine freigegebenen Buchhaltungsbelege im gewählten Zeitraum";this._render();return;}
     if(!window.confirm(ids.length+" bereits geprüfte PDF-Belege als ZIP exportieren? Keine Lexware-Erfassung wird dadurch markiert."))return;
     await this._run(async()=>{
@@ -93,7 +126,7 @@ class MittelhofAccountingCard extends HTMLElement {
   }
   async _markUploaded() {
     const selected=this._selected;
-    if(!selected || selected.source_changed || !selected.record)return;
+    if(!selected || selected.source_changed || !selected.record || selected.record.document_kind==="invoice")return;
     if(!window.confirm("Hast du das PDF wirklich als Einnahmenbeleg in Lexware Office L hochgeladen und geprüft?"))return;
     await this._run(async()=>{
       const id=selected.source.booking_id;
@@ -107,18 +140,73 @@ class MittelhofAccountingCard extends HTMLElement {
   _render() {
     const e=MittelhofAccountingCard.esc;
     const s=this._selected?.source, record=this._selected?.record;
-    const counts={ready:0,uploaded_manually:0};
+    const counts={ready:0,uploaded_manually:0,invoice_reference:0};
+    const locked=record?.status==="uploaded_manually"||record?.status==="invoice_reference";
+    const invoiceMode=this._documentKind==="invoice";
     for(const x of this._records)if(counts[x.status]!==undefined)counts[x.status]++;
     const items=(this._search?.bookings||[]).map(b=>{
       const rec=this._records.find(x=>x.booking_id===String(b.booking_id));
-      const state=rec?.status==="uploaded_manually"?"Hochgeladen":rec?.status==="ready"?"Bereit":"Prüfung offen";
+      const proposed=/tomas|direkt|direct/i.test(String(b.channel||""))?"invoice":"booking_record";
+      const type=rec?.document_kind||proposed;
+      const state=rec?.status==="invoice_reference"?"Rechnung "+rec.invoice_reference:
+        rec?.status==="uploaded_manually"?"PDF hochgeladen":rec?.status==="ready"?"PDF bereit":
+        type==="invoice"?"Rechnung vorgesehen":"Buchungsbeleg offen";
       return '<button data-booking="'+e(b.booking_id)+'">'+e(b.arrival)+' · '+e(b.house)+' · '+e(b.guest||"Gast")+
         ' · '+e(b.channel||"Direkt")+' ['+state+']</button>';
     }).join("");
-    const rows=s?.rows?.map((r,i)=>'<div class="line"><div><strong>'+e(r.description)+'</strong><small>'+
-      e(r.gross)+' € · '+e(r.quantity)+' × Quelle · Vorschlag: '+e(r.suggested_tax_rate||"unbekannt")+'%</small></div>'+
-      '<select data-rate="'+i+'"><option value="">USt prüfen</option>'+
-      ["0","7","19"].map(rate=>'<option value="'+rate+'">'+rate+' %</option>').join("")+'</select></div>').join("")||"";
+    const reviewed=record?.reviewed_rows||[];
+    const reviewedMap=new Map(reviewed.map(r=>[r.source_index,r]));
+    const hasReviewed=reviewed.length>0;
+    const rows=(s?.rows||[]).map(r=>{
+      const old=reviewedMap.get(r.source_index);
+      const included=!hasReviewed||Boolean(old);
+      const desc=old?.description??r.description;
+      const gross=old?.gross??r.gross;
+      const rate=old?.tax_rate||"";
+      return '<div class="line" data-line="'+r.source_index+'">'+
+        '<label><input data-include type="checkbox" '+(included?'checked ':'')+(locked?'disabled':'')+'> Gastpreisposition</label>'+
+        '<input data-description type="text" maxlength="160" value="'+e(desc)+'" '+(locked?'disabled':'')+'>'+
+        '<div class="money"><input data-gross type="number" step="0.01" min="0.01" value="'+e(gross)+'" '+(locked?'disabled':'')+'>'+
+        ' EUR <select data-rate '+(locked?'disabled':'')+'><option value="">USt prüfen</option>'+
+        ["0","7","19"].map(value=>'<option value="'+value+'" '+(value===rate?'selected':'')+'>'+value+' %</option>').join("")+
+        '</select></div></div>';
+    }).join("");
+    const ignored=(s?.ignored_settlement_lines||[]).map(r=>
+      '<li>'+e(r.description)+' · '+e(r.gross)+' EUR ('+
+        (r.reason==="platform_commission"?"Portalprovision separat":"Storno-Abrechnung, nicht Gastumsatz")+
+      ')</li>').join("");
+    const kindSelector='<label>Dokumentart <select data-kind '+(locked?'disabled':'')+'>'+
+      '<option value="booking_record" '+(invoiceMode?'':'selected')+'>Buchhaltungsbeleg</option>'+
+      '<option value="invoice" '+(invoiceMode?'selected':'')+'>Gastrechnung vorgesehen / referenzieren</option>'+
+      '</select></label>';
+    const invoiceDetails=record?.status==="invoice_reference"?
+      '<p><strong>Vorhandene Gastrechnung: '+e(record.invoice_reference)+'</strong></p>':
+      '<p>Rechnung vor Anreise außerhalb dieses Moduls erstellen. Sobald sie tatsächlich ausgestellt und in Lexware erfasst ist, ihre Rechnungsreferenz hinterlegen:</p>'+
+      '<input type="text" maxlength="120" data-invoice-ref placeholder="Rechnungsnummer / Belegreferenz">';
+    const detail=s?
+      '<p><strong>'+e(s.house)+' · '+e(s.guest)+'</strong><br>'+e(s.arrival)+' bis '+e(s.departure)+' · '+e(s.channel)+'</p>'+
+      '<p><strong>Gastbrutto: '+e(s.total_gross)+' EUR</strong><small>Zahlungseingang nicht geprüft</small></p>'+
+      (this._selected.source_changed?'<p class="error">Smoobu-Buchung verändert. Alter Export gesperrt, in Lexware ggf. manuell korrigieren.</p>':'')+
+      kindSelector+
+      (invoiceMode?
+        '<p class="warning">Direktbuchung/TOMAS/Homepage-Überweisung: keine zweite Buchungs-PDF-Einnahme erfassen. Dieses Modul stellt keine Gastrechnung aus.</p>'+
+        invoiceDetails+'<div class="actions"><button data-invoice '+
+          (this._busy||locked||this._selected.source_changed?'disabled':'')+
+          '>Bestehende Rechnung referenzieren</button></div>':
+        (s.warnings||[]).map(w=>'<p class="warning">'+e(w)+'</p>').join("")+
+        '<h4>Gastpreispositionen – abwählen oder bearbeiten</h4>'+rows+
+        (ignored?'<details><summary>Separat behandelte Portal-/Stornopositionen</summary><ul>'+ignored+'</ul></details>':'')+
+        '<p><small>Die ausgewählten Bruttobeträge müssen insgesamt exakt '+e(s.total_gross)+
+        ' EUR ergeben. Nur Gastleistungen gehören hier hinein.</small></p>'+
+        '<div class="actions"><button data-review '+(this._busy||locked||this._selected.source_changed?'disabled':'')+
+        '>Steuern prüfen und PDF freigeben</button>'+
+        '<button data-pdf '+(this._busy||!record||record.document_kind==="invoice"||this._selected.source_changed?'disabled':'')+
+        '>PDF herunterladen</button>'+
+        '<button data-upload '+(this._busy||!record||locked||this._selected.source_changed?'disabled':'')+
+        '>In Lexware hochgeladen</button></div>'
+      )+
+      '<small>Status: '+e(record?.status||(invoiceMode?'Rechnung vorgesehen':'Noch nicht geprüft'))+'</small>':
+      '<p>Bitte eine Buchung auswählen.</p>';
     this.shadowRoot.innerHTML=`
       <style>
         :host{display:block;font:inherit;color:var(--primary-text-color)}
@@ -129,44 +217,36 @@ class MittelhofAccountingCard extends HTMLElement {
         button{cursor:pointer}button:disabled{opacity:.45;cursor:not-allowed}
         .items{display:flex;flex-direction:column;gap:6px;max-height:560px;overflow:auto;margin-top:12px}
         .items button{text-align:left}
-        .line{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px solid var(--divider-color,#ddd)}
+        .line{display:grid;grid-template-columns:155px minmax(140px,1fr) auto;gap:9px;align-items:center;padding:10px 0;border-bottom:1px solid var(--divider-color,#ddd)}
+        .money{display:flex;align-items:center;gap:7px}.money input{width:100px}.line input[type=text]{min-width:0}
+        input[type=checkbox]{width:auto}
         small{display:block;opacity:.75}.actions{display:flex;flex-wrap:wrap;gap:9px;margin:14px 0}
         .error{padding:12px;color:var(--error-color,#b00)}.warning{padding:9px;background:var(--secondary-background-color,#eee);border-radius:8px;margin:8px 0}
-        @media(max-width:800px){.grid{grid-template-columns:1fr}.panel{padding:10px}}
+        @media(max-width:850px){.grid{grid-template-columns:1fr}.panel{padding:10px}.line{grid-template-columns:1fr}.money{flex-wrap:wrap}}
       </style>
       <ha-card>
         <h2>Buchhaltung · Lexware L</h2>
-        <p>Interne Buchungsbelege, keine Rechnungen und kein Zahlungsabgleich. Lexware bleibt führend.</p>
+        <p>Gastbrutto und Portalabrechnung getrennt. Bereits ausgestellte Rechnungen nur referenzieren; kein Zahlungsabgleich.</p>
         <div class="actions">
           <label>Von <input type="date" data-from value="${e(this._from)}"></label>
           <label>Bis <input type="date" data-to value="${e(this._to)}"></label>
           <button data-refresh ${this._busy?"disabled":""}>Buchungen suchen</button>
           <button data-bundle ${this._busy?"disabled":""}>Geprüfte PDFs als ZIP (max. 25)</button>
         </div>
-        <p>${this._search?.total||0} Buchungen · ${counts.ready} geprüft · ${counts.uploaded_manually} manuell hochgeladen</p>
+        <p>${this._search?.total||0} Buchungen · ${counts.ready} PDFs geprüft · ${counts.uploaded_manually} hochgeladen · ${counts.invoice_reference} Rechnungen referenziert</p>
         ${this._error?'<div class="error">'+e(this._error)+'</div>':""}
         <div class="grid">
           <section class="panel"><strong>Buchungen</strong><div class="items">${items||"Keine Buchungen für diesen Zeitraum"}</div></section>
           <section class="panel"><strong>Belegprüfung</strong>
-            ${s?`
-              <p><strong>${e(s.house)} · ${e(s.guest)}</strong><br>${e(s.arrival)} bis ${e(s.departure)} · ${e(s.channel)}</p>
-              <p><strong>Gastbrutto: ${e(s.total_gross)} €</strong><br><small>Keine Aussage zum tatsächlichen Zahlungseingang</small></p>
-              ${this._selected.source_changed?'<p class="error">Buchung geändert: alter Beleg gesperrt. Nach Lexware-Upload Korrekturfall manuell klären.</p>':""}
-              ${(s.warnings||[]).map(w=>'<p class="warning">'+e(w)+'</p>').join("")}
-              ${rows}
-              <div class="actions">
-                <button data-review ${this._busy||this._selected.source_changed?"disabled":""}>Steuern prüfen und Beleg freigeben</button>
-                <button data-pdf ${this._busy||!record||this._selected.source_changed?"disabled":""}>PDF herunterladen</button>
-                <button data-upload ${this._busy||!record||this._selected.source_changed||record.status==="uploaded_manually"?"disabled":""}>In Lexware hochgeladen</button>
-              </div>
-              <small>Status: ${e(record?.status||"Noch nicht geprüft")}. Der Download verändert keine Zahlungen und erfasst nichts in Lexware.</small>
-              `: '<p>Buchung auswählen, Steuerzuordnung prüfen und PDF erzeugen.</p>'}
+            ${detail}
           </section>
         </div>
       </ha-card>`;
     this.shadowRoot.querySelector("[data-refresh]")?.addEventListener("click",()=>void this._refresh());
     this.shadowRoot.querySelectorAll("[data-booking]").forEach(el=>
       el.addEventListener("click",()=>void this._open(el.dataset.booking)));
+    this.shadowRoot.querySelector("[data-kind]")?.addEventListener("change",event=>{this._documentKind=event.target.value;this._render();});
+    this.shadowRoot.querySelector("[data-invoice]")?.addEventListener("click",()=>void this._referenceInvoice());
     this.shadowRoot.querySelector("[data-review]")?.addEventListener("click",()=>void this._review());
     this.shadowRoot.querySelector("[data-bundle]")?.addEventListener("click",()=>void this._downloadBundle());
     this.shadowRoot.querySelector("[data-pdf]")?.addEventListener("click",()=>void this._download());
