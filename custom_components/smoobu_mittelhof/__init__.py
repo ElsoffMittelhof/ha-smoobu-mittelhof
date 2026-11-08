@@ -60,6 +60,7 @@ from .templates import TemplateRepository
 from .workflow import WorkflowManager
 from .guest_portal import GuestDraftRepository, GuestInboxState, register_guest_views, sync_guest_drafts
 from .invoice_portal import register_invoice_service_view
+from .accounting_portal import AccountingRepository, register_accounting_views
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -76,6 +77,7 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     await async_register_services(hass)
     register_guest_views(hass)
     register_invoice_service_view(hass)
+    register_accounting_views(hass)
     return True
 
 
@@ -194,6 +196,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         await runtime.guest_drafts.async_load()
         runtime.guest_inbox = GuestInboxState(hass)
         await runtime.guest_inbox.async_load()
+        runtime.accounting = AccountingRepository(hass)
+        await runtime.accounting.async_load()
     hass.data[DOMAIN][entry.entry_id] = runtime
 
     await coordinator.async_config_entry_first_refresh()
