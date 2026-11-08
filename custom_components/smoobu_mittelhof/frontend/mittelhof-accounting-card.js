@@ -73,6 +73,24 @@ class MittelhofAccountingCard extends HTMLElement {
       setTimeout(()=>URL.revokeObjectURL(url),2000);
     });
   }
+  async _downloadBundle() {
+    const visible=new Set((this._search?.bookings||[]).map(x=>String(x.booking_id)));
+    const ids=this._records.filter(x=>visible.has(x.booking_id)&&
+      ["ready","uploaded_manually"].includes(x.status)).map(x=>x.booking_id).slice(0,25);
+    if(!ids.length){this._error="Keine freigegebenen Buchhaltungsbelege im gewählten Zeitraum";this._render();return;}
+    if(!window.confirm(ids.length+" bereits geprüfte PDF-Belege als ZIP exportieren? Keine Lexware-Erfassung wird dadurch markiert."))return;
+    await this._run(async()=>{
+      const result=await this._api("POST","accounting/bundle",{booking_ids:ids});
+      const raw=atob(result.zip_base64);
+      const bytes=new Uint8Array(raw.length);
+      for(let i=0;i<raw.length;i++)bytes[i]=raw.charCodeAt(i);
+      const blob=new Blob([bytes],{type:"application/zip"});
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement("a");
+      a.href=url;a.download=result.filename;this.shadowRoot.appendChild(a);a.click();a.remove();
+      setTimeout(()=>URL.revokeObjectURL(url),2000);
+    });
+  }
   async _markUploaded() {
     const selected=this._selected;
     if(!selected || selected.source_changed || !selected.record)return;
@@ -123,6 +141,7 @@ class MittelhofAccountingCard extends HTMLElement {
           <label>Von <input type="date" data-from value="${e(this._from)}"></label>
           <label>Bis <input type="date" data-to value="${e(this._to)}"></label>
           <button data-refresh ${this._busy?"disabled":""}>Buchungen suchen</button>
+          <button data-bundle ${this._busy?"disabled":""}>Geprüfte PDFs als ZIP (max. 25)</button>
         </div>
         <p>${this._search?.total||0} Buchungen · ${counts.ready} geprüft · ${counts.uploaded_manually} manuell hochgeladen</p>
         ${this._error?'<div class="error">'+e(this._error)+'</div>':""}
@@ -149,6 +168,7 @@ class MittelhofAccountingCard extends HTMLElement {
     this.shadowRoot.querySelectorAll("[data-booking]").forEach(el=>
       el.addEventListener("click",()=>void this._open(el.dataset.booking)));
     this.shadowRoot.querySelector("[data-review]")?.addEventListener("click",()=>void this._review());
+    this.shadowRoot.querySelector("[data-bundle]")?.addEventListener("click",()=>void this._downloadBundle());
     this.shadowRoot.querySelector("[data-pdf]")?.addEventListener("click",()=>void this._download());
     this.shadowRoot.querySelector("[data-upload]")?.addEventListener("click",()=>void this._markUploaded());
   }
