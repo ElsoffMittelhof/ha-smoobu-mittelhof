@@ -646,7 +646,7 @@ class MittelhofGuestCard extends HTMLElement {
     let html = '<h3>' + esc(b.house) + ' · ' + esc(b.guest) + '</h3>' +
       '<p class="meta">Buchung #' + esc(b.id) + ' · ' + esc(b.arrival) + ' – ' + esc(b.departure) +
       ' · ' + esc(b.channel?.name || b.channel || '') + '</p>' +
-      '<div class="history"><h4>Gesprächsverlauf</h4>' + (messages || '<p>Keine Nachrichten</p>') + '</div>';
+      (this._tab === "invoices" ? "" : '<div class="history"><h4>Gesprächsverlauf</h4>' + (messages || '<p>Keine Nachrichten</p>') + '</div>');
     if (!d) return html + '<button data-op="prepare">Entwurf für Buchung vorbereiten</button>';
     const inv = d.invoice, msg = d.message;
     const review = d.invoice_review || {};
@@ -686,6 +686,14 @@ class MittelhofGuestCard extends HTMLElement {
       '. Keine endgültige Rechnungsfreigabe.</p>';
     if (selected.source_changed) html += '<div class="warning">Buchung seit Entwurf verändert. Bitte erneut vorbereiten und prüfen.</div>';
     if (!this._inbox?.message_send_enabled) html += '<p class="warning">Echter Gastversand ist in den HA-Integrationsoptionen deaktiviert.</p>';
+    for (const note of selected.source_warnings || []) {
+      html += '<p class="warning">Smoobu-Import: ' + esc(note) + '</p>';
+    }
+    if (selected.booking.price != null && Math.abs(Number(selected.booking.price) - Number(inv.total_gross)) > 0.009) {
+      html += '<p class="warning">Smoobu-Buchungsbetrag ' + esc(selected.booking.price) +
+        ' € weicht vom Rechnungsentwurf ab. Vor Erzeugung abgleichen.</p>';
+    }
+    html += '<button data-op="import-smoobu">Positionen und fehlende Adresse erneut aus Smoobu übernehmen</button>';
     html += this._renderInvoicePreview(inv, pf);
     html += '<div class="edit-grid"><section><h4>Rechnungsentwurf (noch keine Rechnung)</h4>' +
       '<p><img class="logo" src="/local/smoobu_mittelhof/invoice-logo.png" alt="Ferienhaus Mittelhof – Logo" /></p>' +
