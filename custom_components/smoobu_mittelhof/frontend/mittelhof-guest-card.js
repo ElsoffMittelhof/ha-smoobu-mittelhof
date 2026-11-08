@@ -68,6 +68,44 @@ class MittelhofGuestCard extends HTMLElement {
     }
   }
 
+  async _loadBookings() {
+    if (!/^\d{4}-\d\d-\d\d$/.test(this._from) || !/^\d{4}-\d\d-\d\d$/.test(this._to)) {
+      this._error = "Zeitraum im Format JJJJ-MM-TT wählen"; this._render(); return;
+    }
+    await this._run(async () => {
+      this._bookingSearch = await this._api("GET", "search-bookings?from=" +
+        encodeURIComponent(this._from) + "&to=" + encodeURIComponent(this._to));
+    });
+  }
+
+  async _loadInvoiceDrafts() {
+    await this._run(async () => { this._invoiceDrafts = await this._api("GET", "invoice-drafts"); });
+  }
+
+  async _selectTab(tab) {
+    if (!["inbox", "bookings", "invoices"].includes(tab)) return;
+    if (this._hasUnsaved && !window.confirm("Ungespeicherte Änderungen verwerfen?")) return;
+    this._hasUnsaved = false;
+    this._tab = tab;
+    this._selected = null;
+    if (tab === "bookings") await this._loadBookings();
+    else if (tab === "invoices") await this._loadInvoiceDrafts();
+    else await this._loadInbox();
+  }
+
+  async _importSmoobu() {
+    const d = this._selected?.draft;
+    if (!d) return;
+    if (this._hasUnsaved && !window.confirm("Zuerst ungespeicherte Änderungen verwerfen?")) return;
+    if (!window.confirm("Smoobu-Positionen neu übernehmen? Schon bearbeitete Rechnungspositionen werden ersetzt.")) return;
+    await this._run(async () => {
+      await this._api("POST", "bookings/" + this._selected.booking.id + "/import-smoobu",
+        {revision: d.revision, confirm_replace: true});
+      this._selected = await this._api("GET", "bookings/" + this._selected.booking.id);
+      this._invoiceDrafts = await this._api("GET", "invoice-drafts");
+      this._hasUnsaved = false;
+    });
+  }
   async _loadInbox() {
     if (this._hasUnsaved && !window.confirm("Ungespeicherte Änderungen verwerfen?")) return;
     await this._run(async () => { this._inbox = await this._api("GET", "threads"); });
@@ -79,6 +117,7 @@ class MittelhofGuestCard extends HTMLElement {
       this._hasUnsaved = false;
       this._selected = await this._api("GET", "bookings/" + encodeURIComponent(id));
       await this._syncInvoiceService();
+      await this._refreshInboxSilent();
     });
   }
 
