@@ -486,30 +486,123 @@ class MittelhofGuestCard extends HTMLElement {
 
   _renderInbox() {
     const esc = MittelhofGuestCard.esc;
-    if (!this._inbox) return '<p>Posteingang wird geladen …</p>';
-    const threads = this._inbox.threads || [];
-    const drafts = this._inbox.drafts || [];
-    const seen = new Set();
-    const rows = threads.map((t) => {
-      const id = String(t.booking?.id || "");
+    const row = (id, house, guest, detail, when = "", status = "") => {
+      id = String(id || "");
       if (!/^\d+$/.test(id)) return "";
-      seen.add(id);
+      const searchable = [house, guest, detail, id].join(" ").toLowerCase();
+      if (this._searchText && !searchable.includes(this._searchText.toLowerCase())) return "";
+      if (this._searchHouse && house !== this._searchHouse) return "";
       return '<button class="thread" data-booking="' + esc(id) + '">' +
-        '<strong>' + esc(t.apartment?.name || "Unterkunft") + '</strong>' +
-        '<span>' + esc(t.booking?.guest_name || "Gast") + '</span>' +
-        '<small>' + esc(t.latest_message?.text_content || "Nachricht") + '</small>' +
-        '</button>';
-    }).join("");
-    const other = drafts.filter((d) => !seen.has(String(d.booking_id))).map((d) =>
-      '<button class="thread" data-booking="' + esc(d.booking_id) + '">' +
-      '<strong>Entwurf · Buchung #' + esc(d.booking_id) + '</strong>' +
-      '<span>' + esc(d.channel || "") + '</span>' +
-      '<small>Nachricht: ' + esc(d.message_status) + ' · Rechnung: ' + esc(d.invoice_status) + '</small>' +
-      '</button>'
+        '<strong>' + esc(house || "Unterkunft") + ' · ' + esc(guest || "Gast") + '</strong>' +
+        '<span>' + esc(when) + '</span>' + (status ? '<small>' + esc(status) + '</small>' : '') +
+        '<small>' + esc(detail || "") + '</small></button>';
+    };
+    let values = [], controls = "", note = "";
+    if (this._tab === "inbox") {
+      if (!this._inbox) return "<p>Neue Nachrichten und Buchungen werden geladen …</p>";
+      const ids = new Set(this._inbox.new_messages || []);
+      const threads = this._inbox.threads || [];
+      const booked = new Set();
+      values = threads.filter((t) => ids.has(String(t.booking?.id || ""))).map((t) => {
+        const id = String(t.booking?.id || "");
+        booked.add(id);
+        return {id, house: t.apartment?.name || "", guest: t.booking?.guest_name || "",
+          detail: t.latest_message?.text_content || "Neue Gastnachricht", when: t.latest_message?.created_at || "",
+          status:"Neue Gastnachricht"};
+      });
+      for (const d of this._inbox.new_bookings || []) {
+        if (!booked.has(String(d.booking_id))) values.push({
+          id: String(d.booking_id), house: d.house, guest: d.guest,
+          detail: "Neue Buchung", when: d.arrival || "", status: "Neue Buchung"});
+      }
+      note = this._inbox.initial_snapshot
+        ? "Die bisherigen Smoobu-Gespräche wurden als Ausgangsbestand markiert. Ab jetzt erscheinen nur neu eingegangene Vorgänge."
+        : "Nur neue Gastnachrichten und seit der ersten Nutzung neu erkannte Buchungen. Öffnen markiert den Vorgang hier als gelesen.";
+      if (this._inbox.truncated || this._inbox.message_scan_limit_reached)
+        note += " Bei sehr vielen Nachrichten bitte erneut aktualisieren; ältere Vorgänge sind unter Buchungen auffindbar.";
+    } else if (this._tab === "bookings") {
+      controls = '<div class="search-dates">' +
+        '<label>Von<input type="date" data-search-from value="' + esc(this._from) + '"></label>' +
+        '<label>Bis<input type="date" data-search-to value="' + esc(this._to) + '"></label>' +
+        '<button data-op="search-bookings">Zeitraum laden</button></div>';
+      values = (this._bookingSearch?.bookings || []).map((b) => ({
+        id:b.booking_id, house:b.house, guest:b.guest,
+        detail:"Anreise " + (b.arrival || "") + " · Abreise " + (b.departure || ""),
+        when:b.arrival || "", status:b.channel || "Buchung"
+      }));
+      note = "Alle aktiven Buchungen im gewählten Reisezeitraum – unabhängig von neuen Nachrichten. Bis 731 Tage je Suche.";
+    } else {
+      values = (this._invoiceDrafts?.drafts || []).map((d) => ({
+        id:d.booking_id, house:d.house, guest:d.guest,
+        detail:"Buchung #" + d.booking_id + " · Rechnung: " + (d.invoice_status || "Entwurf"),
+        when:d.arrival || "", status:"Rechnungsentwurf, Revision " + (d.revision || "–")
+      }));
+      note = "Hier stehen gespeicherte RechnungsENTWÜRFE. Es wurden bisher keine rechtsverbindlichen Rechnungen erstellt. Bereits erzeugte DEMO-PDFs sind im jeweiligen Buchungsentwurf erreichbar, wenn der private Rechnungsdienst verbunden ist.";
+    }
+    const houses = [...new Set(values.map((v) => v.house).filter(Boolean))].sort();
+    controls += '<label>Suchen<input data-search-text placeholder="Gast, Haus oder Buchungs-ID" value="' +
+      esc(this._searchText) + '"></label>' +
+      '<label>Haus<select data-search-house><option value="">Alle Häuser</option>' +
+      houses.map((house) => '<option value="' + esc(house) + '"' +
+        (house === this._searchHouse ? " selected" : "") + '>' + esc(house) + '</option>').join("") +
+      '</select></label><button data-op="filter">Filtern</button>';
+    const rows = values.map((v) => row(v.id, v.house, v.guest, v.detail, v.when, v.status)).join("");
+    return '<h3>' + esc(this._tab === "inbox" ? "Posteingang · neue Vorgänge" :
+       this._tab === "bookings" ? "Buchungen nach Zeitraum" : "Rechnungsentwürfe") + '</h3>' +
+      controls + '<div class="thread-list">' +
+      (rows || '<p>Keine passenden Einträge.</p>') + '</div><p class="meta">' + esc(note) + '</p>';
+  }
+
+  _renderConversation() {
+    const esc = MittelhofGuestCard.esc;
+    const s = this._selected;
+    if (!s) return '<p>Links eine Buchung auswählen, um ihren vollständigen Smoobu-Gesprächsverlauf zu öffnen.</p>';
+    const b = s.booking;
+    const messages = (s.messages || []).map((m) =>
+      '<div class="bubble ' + (Number(m.type) === 1 ? "incoming" : "outgoing") + '">' +
+      '<small>' + (Number(m.type) === 1 ? "Gast" : "Gastgeber") + ' · ' +
+      esc(m.subject || "") + '</small><div class="body">' +
+      esc(m.message || m.htmlMessage || m.messageHtml || "") + '</div></div>'
     ).join("");
-    return '<h3>Posteingang · ' + esc(this._inbox.unread_messages || 0) + ' ungelesen</h3>' +
-      '<div class="thread-list">' + (rows + other || '<p>Keine Konversationen/Entwürfe vorhanden</p>') + '</div>' +
-      '<small>Die Posteingangsliste zeigt die erste Smoobu-Seite (bis 100 Gespräche) und alle lokalen Entwürfe.</small>';
+    let html = '<h3>' + esc(b.house || "Haus") + ' · ' + esc(b.guest || "Gast") + '</h3>' +
+      '<p class="meta">Buchung #' + esc(b.id) + ' · ' + esc(b.arrival) + ' bis ' +
+      esc(b.departure) + '</p><div class="history"><h4>Gesprächsverlauf</h4>' +
+      (messages || '<p>Noch keine Nachrichten vorhanden.</p>') + '</div>' +
+      '<button data-op="go-invoice">Rechnungsentwurf dieser Buchung öffnen</button>';
+    const d = s.draft;
+    if (!d) return html + '<button data-op="prepare">Entwurf vorbereiten</button>';
+    html += '<section><h4>Nachrichtenentwurf</h4><p class="meta">Status: ' +
+      esc(d.message?.status || "draft") + '</p>' +
+      this._field("subject", "Betreff", d.message?.subject || "") +
+      this._field("body", "Nachricht", d.message?.body || "", true) +
+      '<div class="actions"><button data-op="save-message">Nachrichtentwurf speichern</button>' +
+      '<button data-op="regenerate">Aus Zahlungsinformationen neu erzeugen</button>' +
+      '<button data-op="approve">Nachricht manuell freigeben</button>' +
+      '<button class="send" data-op="send" ' +
+      (!s.source_changed && d.message?.status === "approved" && this._inbox?.message_send_enabled ? "" : "disabled") +
+      '>Freigegebene Nachricht senden</button></div></section>';
+    return html;
+  }
+
+  async _saveMessage() {
+    const d = this._selected?.draft;
+    if (!d) return;
+    const msg = d.message || {};
+    if (["sent","sending","delivery_unknown"].includes(msg.status)) {
+      window.alert("Diese Nachricht darf nach Versand nicht mehr bearbeitet werden");
+      return;
+    }
+    const changes = {message: {
+      subject: this.shadowRoot.querySelector('[data-field="subject"]').value,
+      body: this.shadowRoot.querySelector('[data-field="body"]').value
+    }};
+    await this._run(async () => {
+      const id = this._selected.booking.id;
+      await this._api("PATCH", "bookings/" + id + "/draft", {revision:d.revision,changes});
+      this._selected = await this._api("GET","bookings/" + id);
+      this._hasUnsaved = false;
+      await this._refreshInboxSilent();
+    });
   }
 
   _renderInvoicePreview(invoice, preflight) {
