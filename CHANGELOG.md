@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.7.1 — 2026-11-08 (Produktivversion Gästezentrum)
+
+- Die nach CI und Offline-Regressionen geprüften Funktionen aus 0.7.1rc1 sind in die vollständige reguläre Version 0.7.1 übernommen: getrennter Posteingang, Buchungssuche mit Konversation und Timeline-Deep-Link, selektierbare Rechnungsentwürfe.
+- Smoobu-Preispositionen und Gastland mit konservativem Mapping sowie Revision-/Summenprüfung für manuelle Rechnungsänderungen.
+- Alle bestehenden Wäsche-, NUKI-, IT.NRW- und Portalabläufe bleiben unverändert; Gastfunktionen sind zunächst deaktiviert und Nachrichtenversand bleibt standardmäßig AUS.
+- Rechnungen bleiben ausschließlich Entwürfe beziehungsweise DEMO-Vorschauen; keine rechtsverbindliche Ausstellung, kein GoBD-Archiv und kein automatischer Rechnungsversand.
+- Installation auf dem einzigen Home-Assistant-System erst nach Backup und mit dokumentiertem Rollback; eine reale HA-/Smoobu-Abnahme wird nicht durch CI ersetzt. Siehe `docs/release-0.7.1-production.md`.
+
 ## 0.7.1rc1 — 2026-11-08 (Staging-Vorabversion)
 
 - Gästeverwaltung in drei Arbeitsbereiche getrennt: **Posteingang** nur für neu erkannte Gastnachrichten/Neubuchungen, **Buchungen** mit manueller Zeitraumsuche und vollständigem Smoobu-Gespräch je Buchung, **Rechnungen** mit gesonderter indexierter Liste der gespeicherten Rechnungsentwürfe.
