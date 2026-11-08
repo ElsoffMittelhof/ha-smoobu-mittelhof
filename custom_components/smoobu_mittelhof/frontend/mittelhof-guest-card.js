@@ -10,10 +10,18 @@ class MittelhofGuestCard extends HTMLElement {
     this._busy = false;
     this._error = "";
     this._hasUnsaved = false;
+    this._tab = "inbox";
+    this._bookingSearch = null;
+    this._invoiceDrafts = null;
+    this._from = new Date(Date.now() - 30*86400000).toISOString().slice(0,10);
+    this._to = new Date(Date.now() + 180*86400000).toISOString().slice(0,10);
+    this._searchText = "";
+    this._searchHouse = "";
   }
 
   setConfig(config) {
     this._config = config || {};
+    if (["inbox","bookings","invoices"].includes(this._config.view)) this._tab = this._config.view;
   }
 
   set hass(value) {
@@ -21,6 +29,14 @@ class MittelhofGuestCard extends HTMLElement {
     if (!this._loaded) {
       this._loaded = true;
       this._loadInbox();
+      if (this._tab === "bookings") this._loadBookings();
+      if (this._tab === "invoices") this._loadInvoiceDrafts();
+      const params = new URLSearchParams(window.location.search);
+      const bid = String(params.get("booking_id") || "");
+      if (/^\d{1,18}$/.test(bid)) {
+        this._tab = params.get("mode") === "invoices" ? "invoices" : "bookings";
+        this._open(bid);
+      }
     }
   }
 
