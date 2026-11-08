@@ -186,14 +186,44 @@ class SmoobuApiClient:
         return result
 
 
+    async def get_price_elements(self, booking_id: int | str) -> list[dict[str, Any]]:
+        """Dedicated documented Smoobu endpoint, read-only.
+
+        The reservation-detail endpoint sometimes omits the priceElements array,
+        even if the Smoobu booking user interface shows four separate charges.
+        """
+        payload = await self._request(
+            "GET", f"/api/reservations/{int(booking_id)}/price-elements"
+        )
+        if not isinstance(payload, dict) or not isinstance(payload.get("priceElements"), list):
+            raise SmoobuApiError("Smoobu-Preispositionen nicht verfügbar")
+        return [x for x in payload["priceElements"] if isinstance(x, dict)]
+
+    async def get_guest(self, guest_id: int | str) -> dict[str, Any]:
+        """Fetch guest address/country separately, without logging personal data."""
+        if int(guest_id) < 1:
+            raise SmoobuApiError("Ungültige Smoobu-Gast-ID")
+        payload = await self._request("GET", f"/api/guests/{int(guest_id)}")
+        if not isinstance(payload, dict):
+            raise SmoobuApiError("Smoobu-Gastanschrift nicht verfügbar")
+        return payload
+
     async def get_booking(self, booking_id: int | str) -> dict[str, Any]:
-        """Get billing context, including price elements, without modifying Smoobu."""
+        """Detailed booking; dedicated prices when omitted from detail."""
         payload = await self._request(
             "GET", f"/api/reservations/{int(booking_id)}",
             params={"includePriceElements": "true"},
         )
         if not isinstance(payload, dict):
             raise SmoobuApiError("Unexpected booking response")
+        if not isinstance(payload.get("priceElements"), list) or not payload["priceElements"]:
+            try:
+                payload["priceElements"] = await self.get_price_elements(booking_id)
+            except SmoobuApiError:
+                # Preserve booking functionality even if only finance endpoint
+                # is temporarily down; do not invent a price breakdown.
+                payload["priceElements"] = []
+                payload["_price_elements_unavailable"] = True
         return payload
 
     async def get_message_threads(self, *, page_number: int = 1, page_size: int = 100) -> dict[str, Any]:
