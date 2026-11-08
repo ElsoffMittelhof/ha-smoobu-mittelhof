@@ -68,6 +68,33 @@ class MittelhofGuestCard extends HTMLElement {
     }
   }
 
+  _applySearch() {
+    this._searchText = String(this.shadowRoot.querySelector("[data-search-text]")?.value || "").trim();
+    this._searchHouse = String(this.shadowRoot.querySelector("[data-search-house]")?.value || "");
+    this._render();
+  }
+
+  async _loadBookingsFromInput() {
+    this._from = String(this.shadowRoot.querySelector("[data-search-from]")?.value || "");
+    this._to = String(this.shadowRoot.querySelector("[data-search-to]")?.value || "");
+    await this._loadBookings();
+  }
+
+  async _refreshCurrent() {
+    if (this._tab === "bookings") return this._loadBookings();
+    if (this._tab === "invoices") return this._loadInvoiceDrafts();
+    return this._loadInbox();
+  }
+
+  async _goInvoice() {
+    if (!this._selected?.booking?.id) return;
+    if (this._hasUnsaved && !window.confirm("Ungespeicherte Änderungen verwerfen?")) return;
+    this._hasUnsaved = false;
+    this._tab = "invoices";
+    await this._loadInvoiceDrafts();
+    this._render();
+  }
+
   async _loadBookings() {
     if (!/^\d{4}-\d\d-\d\d$/.test(this._from) || !/^\d{4}-\d\d-\d\d$/.test(this._to)) {
       this._error = "Zeitraum im Format JJJJ-MM-TT wählen"; this._render(); return;
@@ -813,7 +840,7 @@ class MittelhofGuestCard extends HTMLElement {
           save: () => this._save(), "save-message": () => this._saveMessage(),
           "search-bookings": () => this._loadBookingsFromInput(),
           filter: () => this._applySearch(),
-          "go-invoice": () => this._selectTab("invoices").then(() => this._openSelectedInvoice()),
+          "go-invoice": () => this._goInvoice(),
           "import-smoobu": () => this._importSmoobu(),
           "preview-request": () => this._requestDemoInvoicePreview(),
           "invoice-export": () => this._exportInvoiceDraft(),
