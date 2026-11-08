@@ -136,6 +136,9 @@ def source_price_lines(booking: dict) -> tuple[list[dict], list[str]]:
         gross = _money(el.get("amount"))
         # Never unilaterally promote a provider tax to 7%. Let user review.
         vat = "7" if kind in ("rent", "cleaning", "dog", "extra_person", "stay_discount") and currency == "EUR" else ""
+        if el.get("tax") is not None and str(el.get("tax")) not in ("0", "0.0", "7", "7.0", "7.00"):
+            vat = ""
+            warnings.append(f"Smoobu-Steuerangabe bei {desc} weicht von 7 % ab – prüfen")
         if not kind:
             warnings.append(f"Unbekannte Leistungsart: {desc} – manuell zuordnen")
         row = {"description": desc,"gross": gross,"tax_rate": vat,
