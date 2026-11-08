@@ -203,7 +203,7 @@ class GuestDraftRepository:
                     context.get("departure") != booking.get("departure") or
                     context.get("guest") != booking.get("guest-name") or
                     str(current["invoice"].get("total_gross")) !=
-                    str(__import__("decimal").Decimal(str(booking.get("price"))).quantize(__import__("decimal").Decimal("0.01")))):
+                    str(Decimal(str(booking.get("price"))).quantize(__import__("decimal").Decimal("0.01")))):
                 return
             fresh = make_draft(booking)
             if fresh["invoice"]["line_items"] == current["invoice"]["line_items"] and (
