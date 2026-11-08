@@ -21,7 +21,6 @@ class TestGuestCenterContract(unittest.TestCase):
         self.assertIn('await runtime.guest_inbox.mark_opened',txt)
         self.assertIn('class GuestInboxState:',txt)
         self.assertIn('message_scan_limit_reached',txt)
-        self.assertIn('confirmed',txt.lower() if False else 'confirmed') if False else None
 
     def test_date_filter_is_limited_and_existing_drafts_read_only(self):
         txt=(ROOT/"guest_portal.py").read_text()
