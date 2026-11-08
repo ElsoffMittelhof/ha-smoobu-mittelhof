@@ -53,6 +53,10 @@ class SmoobuTimelineCard extends HTMLElement {
       show_channel: config.show_channel !== false,
       show_price: config.show_price === true,
       show_people: config.show_people !== false,
+      guest_dashboard_path: typeof config.guest_dashboard_path === "string" &&
+        config.guest_dashboard_path.startsWith("/") &&
+        !config.guest_dashboard_path.startsWith("//") &&
+        !/[?#]/.test(config.guest_dashboard_path) ? config.guest_dashboard_path : "",
       compact: config.compact === true,
       houses: houses.map((item) => ({
         name: item.name || item.house || "Unterkunft",
@@ -362,6 +366,7 @@ class SmoobuTimelineCard extends HTMLElement {
           <div><span>${blocked ? "Status" : "Kanal"}</span><strong>${this._escape(blocked ? "Geblockter Zeitraum" : channel.label)}</strong></div>
           <div><span>${blocked ? "Sperr-ID" : "Buchungs-ID"}</span><strong>${this._escape(booking.booking_id || "–")}</strong></div>
           ${!blocked && this._config.show_price && price != null ? `<div><span>Preis</span><strong>${this._escape(price)} €</strong></div>` : ""}
+          ${!blocked && this._config.guest_dashboard_path && /^\d+$/.test(String(booking.booking_id || "")) ? `<div><button class="conversation-link" data-booking-id="${this._escape(booking.booking_id)}">Gespräch / Rechnungsentwurf öffnen</button></div>` : ""}
         </div>
       </div>`;
   }
@@ -735,6 +740,13 @@ class SmoobuTimelineCard extends HTMLElement {
         this._selected = this._bookings.find((item) => String(item.booking_id || "") === id) || null;
         this._render();
       });
+    });
+
+    root.querySelector(".conversation-link")?.addEventListener("click", (event) => {
+      const id = String(event.currentTarget.dataset.bookingId || "");
+      if (!/^\d+$/.test(id) || !this._config.guest_dashboard_path) return;
+      const url = this._config.guest_dashboard_path + "?booking_id=" + encodeURIComponent(id) + "&mode=bookings";
+      window.location.assign(url);
     });
 
     root.querySelector(".close-details")?.addEventListener("click", () => {

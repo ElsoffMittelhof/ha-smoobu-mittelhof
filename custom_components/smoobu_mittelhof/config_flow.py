@@ -39,6 +39,8 @@ from .const import (
     CONF_NUKI_TEST_EMAIL,
     CONF_NUKI_TEST_MODE,
     CONF_SHOW_GUEST_NAMES,
+    CONF_GUEST_MESSAGE_SEND_ENABLED,
+    CONF_GUEST_PORTAL_ENABLED,
     CONF_SMTP_HOST,
     CONF_SMTP_PASSWORD,
     CONF_SMTP_PORT,
@@ -70,6 +72,8 @@ from .const import (
     DEFAULT_NUKI_TEST_EMAIL,
     DEFAULT_NUKI_TEST_MODE,
     DEFAULT_SHOW_GUEST_NAMES,
+    DEFAULT_GUEST_MESSAGE_SEND_ENABLED,
+    DEFAULT_GUEST_PORTAL_ENABLED,
     DEFAULT_SMTP_HOST,
     DEFAULT_SMTP_PASSWORD,
     DEFAULT_SMTP_PORT,
@@ -157,10 +161,8 @@ class SmoobuOptionsFlow(OptionsFlowWithReload):
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         errors: dict[str, str] = {}
         options = dict(self.config_entry.options)
-        # Display the new operational start when upgrading a previously saved
-        # December pilot configuration, consistent with the runtime migration.
-        if options.get(CONF_LAUNDRY_TRACKING_START) == "2026-12-01":
-            options[CONF_LAUNDRY_TRACKING_START] = DEFAULT_LAUNDRY_TRACKING_START
+        # Preserve the currently configured laundry start date exactly.
+        # Never rewrite persisted operational dates merely by opening Options.
         current_houses = options.get(CONF_HOUSES, self.config_entry.data.get(CONF_HOUSES, ""))
 
         if user_input is not None:
@@ -175,16 +177,18 @@ class SmoobuOptionsFlow(OptionsFlowWithReload):
             vol.Required(CONF_HOUSES, default=current_houses): selector.TextSelector(
                 selector.TextSelectorConfig(multiline=True)
             ),
-            vol.Required(CONF_UPDATE_INTERVAL_MINUTES, default=DEFAULT_UPDATE_INTERVAL_MINUTES): vol.All(int, vol.Range(min=15, max=1440)),
-            vol.Required(CONF_HORIZON_DAYS, default=DEFAULT_HORIZON_DAYS): vol.All(int, vol.Range(min=14, max=365)),
-            vol.Required(CONF_LOOKBACK_DAYS, default=DEFAULT_LOOKBACK_DAYS): vol.All(int, vol.Range(min=0, max=30)),
-            vol.Required(CONF_SHOW_GUEST_NAMES, default=DEFAULT_SHOW_GUEST_NAMES): bool,
-            vol.Required(CONF_CONFIG_DIRECTORY, default=DEFAULT_CONFIG_DIRECTORY): str,
-            vol.Optional(CONF_NOTIFY_SERVICE, default=DEFAULT_NOTIFY_SERVICE): str,
-            vol.Required(CONF_NOTIFICATION_START_HOUR, default=DEFAULT_NOTIFICATION_START_HOUR): vol.All(int, vol.Range(min=0, max=23)),
-            vol.Required(CONF_NOTIFICATION_END_HOUR, default=DEFAULT_NOTIFICATION_END_HOUR): vol.All(int, vol.Range(min=0, max=23)),
-            vol.Required(CONF_LAUNDRY_ENABLED, default=DEFAULT_LAUNDRY_ENABLED): bool,
-            vol.Required(CONF_LAUNDRY_ORDER_MODE, default=DEFAULT_LAUNDRY_ORDER_MODE): selector.SelectSelector(
+            vol.Required(CONF_UPDATE_INTERVAL_MINUTES, default=options.get(CONF_UPDATE_INTERVAL_MINUTES, DEFAULT_UPDATE_INTERVAL_MINUTES)): vol.All(int, vol.Range(min=15, max=1440)),
+            vol.Required(CONF_HORIZON_DAYS, default=options.get(CONF_HORIZON_DAYS, DEFAULT_HORIZON_DAYS)): vol.All(int, vol.Range(min=14, max=365)),
+            vol.Required(CONF_LOOKBACK_DAYS, default=options.get(CONF_LOOKBACK_DAYS, DEFAULT_LOOKBACK_DAYS)): vol.All(int, vol.Range(min=0, max=30)),
+            vol.Required(CONF_SHOW_GUEST_NAMES, default=options.get(CONF_SHOW_GUEST_NAMES, DEFAULT_SHOW_GUEST_NAMES)): bool,
+            vol.Required(CONF_GUEST_MESSAGE_SEND_ENABLED, default=options.get(CONF_GUEST_MESSAGE_SEND_ENABLED, DEFAULT_GUEST_MESSAGE_SEND_ENABLED)): bool,
+            vol.Required(CONF_GUEST_PORTAL_ENABLED, default=options.get(CONF_GUEST_PORTAL_ENABLED, DEFAULT_GUEST_PORTAL_ENABLED)): bool,
+            vol.Required(CONF_CONFIG_DIRECTORY, default=options.get(CONF_CONFIG_DIRECTORY, DEFAULT_CONFIG_DIRECTORY)): str,
+            vol.Optional(CONF_NOTIFY_SERVICE, default=options.get(CONF_NOTIFY_SERVICE, DEFAULT_NOTIFY_SERVICE)): str,
+            vol.Required(CONF_NOTIFICATION_START_HOUR, default=options.get(CONF_NOTIFICATION_START_HOUR, DEFAULT_NOTIFICATION_START_HOUR)): vol.All(int, vol.Range(min=0, max=23)),
+            vol.Required(CONF_NOTIFICATION_END_HOUR, default=options.get(CONF_NOTIFICATION_END_HOUR, DEFAULT_NOTIFICATION_END_HOUR)): vol.All(int, vol.Range(min=0, max=23)),
+            vol.Required(CONF_LAUNDRY_ENABLED, default=options.get(CONF_LAUNDRY_ENABLED, DEFAULT_LAUNDRY_ENABLED)): bool,
+            vol.Required(CONF_LAUNDRY_ORDER_MODE, default=options.get(CONF_LAUNDRY_ORDER_MODE, DEFAULT_LAUNDRY_ORDER_MODE)): selector.SelectSelector(
                 selector.SelectSelectorConfig(
                     options=[
                         {"value": "per_departure", "label": "Pro Abreise bestellen"},
@@ -193,27 +197,27 @@ class SmoobuOptionsFlow(OptionsFlowWithReload):
                     mode=selector.SelectSelectorMode.DROPDOWN,
                 )
             ),
-            vol.Required(CONF_LAUNDRY_INITIAL_STOCK_SETS, default=DEFAULT_LAUNDRY_INITIAL_STOCK_SETS): vol.All(int, vol.Range(min=1, max=500)),
-            vol.Required(CONF_LAUNDRY_INITIAL_STOCK_MATS, default=DEFAULT_LAUNDRY_INITIAL_STOCK_MATS): vol.All(int, vol.Range(min=0, max=500)),
-            vol.Required(CONF_LAUNDRY_TRACKING_START, default=DEFAULT_LAUNDRY_TRACKING_START): vol.All(str, vol.Match(r"^\d{4}-\d{2}-\d{2}$")),
-            vol.Required(CONF_LAUNDRY_REORDER_AFTER_SETS, default=DEFAULT_LAUNDRY_REORDER_AFTER_SETS): vol.All(int, vol.Range(min=1, max=500)),
-            vol.Required(CONF_LAUNDRY_REORDER_QUANTITY_SETS, default=DEFAULT_LAUNDRY_REORDER_QUANTITY_SETS): vol.All(int, vol.Range(min=1, max=500)),
-            vol.Required(CONF_LAUNDRY_REORDER_BATH_MATS, default=DEFAULT_LAUNDRY_REORDER_BATH_MATS): vol.All(int, vol.Range(min=0, max=100)),
-            vol.Required(CONF_LAUNDRY_LEAD_DAYS, default=DEFAULT_LAUNDRY_LEAD_DAYS): vol.All(int, vol.Range(min=0, max=30)),
-            vol.Required(CONF_LAUNDRY_REMINDER_HOURS, default=DEFAULT_LAUNDRY_REMINDER_HOURS): vol.All(int, vol.Range(min=1, max=48)),
-            vol.Optional(CONF_LAUNDRY_EMAIL, default=DEFAULT_LAUNDRY_EMAIL): str,
-            vol.Required(CONF_NUKI_ENABLED, default=DEFAULT_NUKI_ENABLED): bool,
-            vol.Required(CONF_NUKI_LEAD_DAYS, default=DEFAULT_NUKI_LEAD_DAYS): vol.All(int, vol.Range(min=0, max=30)),
-            vol.Required(CONF_NUKI_REMINDER_HOURS, default=DEFAULT_NUKI_REMINDER_HOURS): vol.All(int, vol.Range(min=1, max=48)),
-            vol.Required(CONF_NUKI_TEST_MODE, default=DEFAULT_NUKI_TEST_MODE): bool,
-            vol.Optional(CONF_NUKI_TEST_EMAIL, default=DEFAULT_NUKI_TEST_EMAIL): str,
-            vol.Optional(CONF_SMTP_HOST, default=DEFAULT_SMTP_HOST): str,
-            vol.Required(CONF_SMTP_PORT, default=DEFAULT_SMTP_PORT): vol.All(int, vol.Range(min=1, max=65535)),
-            vol.Optional(CONF_SMTP_USERNAME, default=DEFAULT_SMTP_USERNAME): str,
-            vol.Optional(CONF_SMTP_PASSWORD, default=DEFAULT_SMTP_PASSWORD): str,
-            vol.Optional(CONF_SMTP_SENDER, default=DEFAULT_SMTP_SENDER): str,
-            vol.Required(CONF_SMTP_STARTTLS, default=DEFAULT_SMTP_STARTTLS): bool,
-            vol.Required(CONF_SMTP_SSL, default=DEFAULT_SMTP_SSL): bool,
+            vol.Required(CONF_LAUNDRY_INITIAL_STOCK_SETS, default=options.get(CONF_LAUNDRY_INITIAL_STOCK_SETS, DEFAULT_LAUNDRY_INITIAL_STOCK_SETS)): vol.All(int, vol.Range(min=1, max=500)),
+            vol.Required(CONF_LAUNDRY_INITIAL_STOCK_MATS, default=options.get(CONF_LAUNDRY_INITIAL_STOCK_MATS, DEFAULT_LAUNDRY_INITIAL_STOCK_MATS)): vol.All(int, vol.Range(min=0, max=500)),
+            vol.Required(CONF_LAUNDRY_TRACKING_START, default=options.get(CONF_LAUNDRY_TRACKING_START, DEFAULT_LAUNDRY_TRACKING_START)): vol.All(str, vol.Match(r"^\d{4}-\d{2}-\d{2}$")),
+            vol.Required(CONF_LAUNDRY_REORDER_AFTER_SETS, default=options.get(CONF_LAUNDRY_REORDER_AFTER_SETS, DEFAULT_LAUNDRY_REORDER_AFTER_SETS)): vol.All(int, vol.Range(min=1, max=500)),
+            vol.Required(CONF_LAUNDRY_REORDER_QUANTITY_SETS, default=options.get(CONF_LAUNDRY_REORDER_QUANTITY_SETS, DEFAULT_LAUNDRY_REORDER_QUANTITY_SETS)): vol.All(int, vol.Range(min=1, max=500)),
+            vol.Required(CONF_LAUNDRY_REORDER_BATH_MATS, default=options.get(CONF_LAUNDRY_REORDER_BATH_MATS, DEFAULT_LAUNDRY_REORDER_BATH_MATS)): vol.All(int, vol.Range(min=0, max=100)),
+            vol.Required(CONF_LAUNDRY_LEAD_DAYS, default=options.get(CONF_LAUNDRY_LEAD_DAYS, DEFAULT_LAUNDRY_LEAD_DAYS)): vol.All(int, vol.Range(min=0, max=30)),
+            vol.Required(CONF_LAUNDRY_REMINDER_HOURS, default=options.get(CONF_LAUNDRY_REMINDER_HOURS, DEFAULT_LAUNDRY_REMINDER_HOURS)): vol.All(int, vol.Range(min=1, max=48)),
+            vol.Optional(CONF_LAUNDRY_EMAIL, default=options.get(CONF_LAUNDRY_EMAIL, DEFAULT_LAUNDRY_EMAIL)): str,
+            vol.Required(CONF_NUKI_ENABLED, default=options.get(CONF_NUKI_ENABLED, DEFAULT_NUKI_ENABLED)): bool,
+            vol.Required(CONF_NUKI_LEAD_DAYS, default=options.get(CONF_NUKI_LEAD_DAYS, DEFAULT_NUKI_LEAD_DAYS)): vol.All(int, vol.Range(min=0, max=30)),
+            vol.Required(CONF_NUKI_REMINDER_HOURS, default=options.get(CONF_NUKI_REMINDER_HOURS, DEFAULT_NUKI_REMINDER_HOURS)): vol.All(int, vol.Range(min=1, max=48)),
+            vol.Required(CONF_NUKI_TEST_MODE, default=options.get(CONF_NUKI_TEST_MODE, DEFAULT_NUKI_TEST_MODE)): bool,
+            vol.Optional(CONF_NUKI_TEST_EMAIL, default=options.get(CONF_NUKI_TEST_EMAIL, DEFAULT_NUKI_TEST_EMAIL)): str,
+            vol.Optional(CONF_SMTP_HOST, default=options.get(CONF_SMTP_HOST, DEFAULT_SMTP_HOST)): str,
+            vol.Required(CONF_SMTP_PORT, default=options.get(CONF_SMTP_PORT, DEFAULT_SMTP_PORT)): vol.All(int, vol.Range(min=1, max=65535)),
+            vol.Optional(CONF_SMTP_USERNAME, default=options.get(CONF_SMTP_USERNAME, DEFAULT_SMTP_USERNAME)): str,
+            vol.Optional(CONF_SMTP_PASSWORD, default=options.get(CONF_SMTP_PASSWORD, DEFAULT_SMTP_PASSWORD)): str,
+            vol.Optional(CONF_SMTP_SENDER, default=options.get(CONF_SMTP_SENDER, DEFAULT_SMTP_SENDER)): str,
+            vol.Required(CONF_SMTP_STARTTLS, default=options.get(CONF_SMTP_STARTTLS, DEFAULT_SMTP_STARTTLS)): bool,
+            vol.Required(CONF_SMTP_SSL, default=options.get(CONF_SMTP_SSL, DEFAULT_SMTP_SSL)): bool,
         })
         return self.async_show_form(
             step_id="init",

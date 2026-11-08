@@ -63,7 +63,9 @@
           "laundry_reorder_quantity_sets": "Sets je Nachbestellung",
           "laundry_reorder_bath_mats": "Badvorleger je Nachbestellung",
           "laundry_initial_stock_mats": "Initialer Bestand Badvorleger (separat)",
-          "laundry_tracking_start": "Buchungen ab (JJJJ-MM-TT), aktueller Betriebsbeginn 2026-11-01"
+          "laundry_tracking_start": "Buchungen ab (JJJJ-MM-TT), aktueller Betriebsbeginn 2026-11-01",
+          "guest_portal_enabled": "Gästeverwaltung aktivieren (zunächst AUS; speichert Gästedaten in HA)",
+          "guest_message_send_enabled": "Gastnachrichtenversand ausdrücklich erlauben (standardmäßig AUS)"
         }
       }
     },

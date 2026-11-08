@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.7.1 — 2026-11-08 (Produktivversion Gästezentrum)
+
+- Die nach CI und Offline-Regressionen geprüften Funktionen aus 0.7.1rc1 sind in die vollständige reguläre Version 0.7.1 übernommen: getrennter Posteingang, Buchungssuche mit Konversation und Timeline-Deep-Link, selektierbare Rechnungsentwürfe.
+- Smoobu-Preispositionen und Gastland mit konservativem Mapping sowie Revision-/Summenprüfung für manuelle Rechnungsänderungen.
+- Alle bestehenden Wäsche-, NUKI-, IT.NRW- und Portalabläufe bleiben unverändert; Gastfunktionen sind zunächst deaktiviert und Nachrichtenversand bleibt standardmäßig AUS.
+- Rechnungen bleiben ausschließlich Entwürfe beziehungsweise DEMO-Vorschauen; keine rechtsverbindliche Ausstellung, kein GoBD-Archiv und kein automatischer Rechnungsversand.
+- Installation auf dem einzigen Home-Assistant-System erst nach Backup und mit dokumentiertem Rollback; eine reale HA-/Smoobu-Abnahme wird nicht durch CI ersetzt. Siehe `docs/release-0.7.1-production.md`.
+
+## 0.7.1rc1 — 2026-11-08 (Staging-Vorabversion)
+
+- Gästeverwaltung in drei Arbeitsbereiche getrennt: **Posteingang** nur für neu erkannte Gastnachrichten/Neubuchungen, **Buchungen** mit manueller Zeitraumsuche und vollständigem Smoobu-Gespräch je Buchung, **Rechnungen** mit gesonderter indexierter Liste der gespeicherten Rechnungsentwürfe.
+- Lokale HA-Lesemarkierungen (eigener privater Store) statt Änderungen an Smoobuus globalem Posteingang; erster Abruf legt den historischen Basisbestand fest.
+- Smoobu-Preispositionen bei leerer Detailantwort erneut aus `/api/reservations/<id>/price-elements` laden. Zuordnung der vier Betreiberpositionen inkl. Preis und Menge, mit Testfall 355 € Miete + 55 € Reinigung + 35 € Hund + 30 € zusätzliche Person = 475 €. Unbekannte Extras/manuell abweichende Steuern werden nicht geraten.
+- Gastanschrift samt ISO-Ländercode zusätzlich aus `/api/guests/<guestId>` übernehmen. Nur unbearbeitete alte Entwürfe automatisch anreichern, bearbeitete Entwürfe ausschließlich nach ausdrücklicher Importbestätigung.
+- Unabhängige Sperre von DEMO-PDF-Erstellung bei Abweichung zwischen Smoobu-Buchungsgesamtpreis und Rechnungsentwurf, um versehentliche doppelte Langzeitrabatte zu vermeiden.
+- Timeline-Karte mit optionalem `guest_dashboard_path`: bei Auswahl einer Belegung direkt zur betreffenden Gästekonversation wechseln.
+- Alle neuen Endpunkte Admin-only; Gastnachrichtenversand weiter deaktiviert, keine echte Rechnungsausstellung. Fünf-Views-Mittelhof-Hauptdashboard, Wäsche, NUKI und IT.NRW unverändert.
+- Dokumentation: `docs/release-0.7.1rc1.md`. Erst nach eigenständiger HA-Stagingprüfung als stabilen Produktivstand einsetzen.
+
+## 0.7.0 — 2026-11-07
+
+- Stable, backward-compatible Smoobu Workflow update from v0.6.8 for existing Mittelhof Home Assistant installations. The domain `smoobu_mittelhof`, platform entities and existing NUKI/laundry/IT.NRW workflows remain unchanged.
+- New **opt-in** administrator guest inbox, booking-specific Smoobu conversations, manually editable guest-message and invoice drafts. Guest PII syncing/HA Store initialization is DISABLED until `guest_portal_enabled` is explicitly enabled in the integration's options.
+- New **guest message sending is OFF by default**, independent of opt-in to the inbox. Sending requires a distinct option and explicit per-message admin approval.
+- Fixed options-flow defaults to show the actual saved configuration for existing laundry/NUKI/SMTP settings and the existing custom config directory, preventing accidental reset when enabling the new guest inbox.
+- Draft invoice preview: 10-digit planned number `<house><arrival YYYYMMDD>` for houses 13, 14 and 15; 7% on classified accommodation services (rent, cleaning, max. 2 extra persons, max. 2 dogs). From **8 nights**, 10% discount on total gross rent only (not extras), rounded to cents. Unclassified Smoobu items cannot be auto-assigned or discounted.
+- Optional admin-only connector to an independently installed PRIVATE ZUGFeRD **DEMO-only** preview service. Not installed with HACS. Final invoice issuance, payment collection, invoice emails and GoBD archiving are NOT provided or activated by this release.
+- Separate Lovelace guest card included. Existing `dashboards/mittelhof.yaml` and all five views remain unchanged. New card is not added to existing dashboards automatically.
+- New production-upgrade checks plus existing Python/JS, HACS, hassfest, NUKI, laundry, invoice and statistics regression tests.
+- Safe migration/backout instructions: `docs/release-0.7.0-production.md`. Take a full HA backup before updating. This release was CI-verified but **has not been installed or runtime-tested on the user's live HA instance**.
+
 ## 0.6.8 — 2026-11-02
 
 - Add standalone `smoobu_mittelhof.process_nuki_only` and `smoobu_mittelhof.process_laundry_only` services with optional `force_notify` flag. A manual NUKI request will never process laundry/order status or send a laundry notification, and a laundry request will never process NUKI.
