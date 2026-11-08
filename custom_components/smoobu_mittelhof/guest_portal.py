@@ -19,6 +19,7 @@ from .bookings import valid_bookings
 from .const import DOMAIN
 from .guest_finance import approve_message, booking_fingerprint, make_draft, revise_draft, utc_now, invoice_preflight, compose_message, request_invoice_demo_preview
 from .invoice_numbers import planned_number, house_from_label
+from .smoobu_sources import guest_invoice_address, source_price_lines
 
 DRAFT_STORAGE_KEY = f"{DOMAIN}.guest_drafts"
 DRAFT_STORAGE_VERSION = 1
@@ -184,6 +185,28 @@ class GuestDraftRepository:
                     await self._save()
             return deepcopy(self._drafts[key])
 
+    async def enrich_pristine(self, booking: dict) -> None:
+        """Upgrade only untouched auto-generated drafts, preserving manual edits."""
+        key = str(booking["id"])
+        async with self._lock:
+            current = self._drafts.get(key)
+            if not current or current.get("revision") != 1:
+                return
+            if len(current.get("audit") or []) != 1 or current["audit"][0].get("event") != "prepared":
+                return
+            if current.get("source_fingerprint") != booking_fingerprint(booking):
+                return
+            fresh = make_draft(booking)
+            if fresh["invoice"]["line_items"] == current["invoice"]["line_items"] and (
+                    fresh["invoice"].get("recipient_country") == current["invoice"].get("recipient_country")):
+                return
+            # Preserve audit origin; all invoice fields were untouched until now.
+            fresh["created_at"] = current["created_at"]
+            fresh["revision"] = 2
+            fresh["audit"] = list(current["audit"]) + [{"at": utc_now(), "event": "source_enriched"}]
+            self._drafts[key] = fresh
+            await self._save()
+
     async def revise(self, booking_id: str, revision: int, changes: dict[str, Any]) -> dict[str, Any]:
         async with self._lock:
             current = self._drafts.get(booking_id)
@@ -287,6 +310,23 @@ def _get_runtime(hass: HomeAssistant):
         raise web.HTTPServiceUnavailable(text="Gästeverwaltung in den Integrationsoptionen noch nicht aktiviert")
     return runtime
 
+
+async def _billing_source(runtime, booking: dict) -> tuple[dict, list[dict], list[str]]:
+    """Do not expose raw guest API response; fall back to known booking address."""
+    guest = None
+    guest_id = booking.get("guestId")
+    if guest_id is not None and str(guest_id).isdigit() and int(guest_id) > 0:
+        try:
+            guest = await runtime.api.get_guest(int(guest_id))
+        except Exception:
+            pass  # Missing guest endpoint must not break the booking view.
+    address = guest_invoice_address(booking, guest)
+    rows, warnings = source_price_lines(booking)
+    if booking.get("_price_elements_unavailable"):
+        warnings.append("Smoobu-Einzelpositionen derzeit nicht abrufbar")
+    if not address.get("recipient_country"):
+        warnings.append("ISO-Ländercode konnte aus Smoobu nicht sicher zugeordnet werden")
+    return address, rows, warnings
 
 def _require_admin(request: web.Request) -> None:
     user = request.get("hass_user")
