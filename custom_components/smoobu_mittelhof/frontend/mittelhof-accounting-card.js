@@ -154,12 +154,23 @@ class MittelhofAccountingCard extends HTMLElement {
       return '<button data-booking="'+e(b.booking_id)+'">'+e(b.arrival)+' · '+e(b.house)+' · '+e(b.guest||"Gast")+
         ' · '+e(b.channel||"Direkt")+' ['+state+']</button>';
     }).join("");
-    const rows=(s?.rows||[]).map(r=>'<div class="line" data-line="'+r.source_index+'">'+
-      '<label><input data-include type="checkbox" checked '+(locked?'disabled':'')+'> Gastpreisposition</label>'+
-      '<input data-description type="text" maxlength="160" value="'+e(r.description)+'" '+(locked?'disabled':'')+'>'+
-      '<div class="money"><input data-gross type="number" step="0.01" min="0.01" value="'+e(r.gross)+'" '+(locked?'disabled':'')+'>'+
-      ' EUR <select data-rate '+(locked?'disabled':'')+'><option value="">USt prüfen</option>'+
-      ["0","7","19"].map(rate=>'<option value="'+rate+'">'+rate+' %</option>').join("")+'</select></div></div>').join("");
+    const reviewed=record?.reviewed_rows||[];
+    const reviewedMap=new Map(reviewed.map(r=>[r.source_index,r]));
+    const hasReviewed=reviewed.length>0;
+    const rows=(s?.rows||[]).map(r=>{
+      const old=reviewedMap.get(r.source_index);
+      const included=!hasReviewed||Boolean(old);
+      const desc=old?.description??r.description;
+      const gross=old?.gross??r.gross;
+      const rate=old?.tax_rate||"";
+      return '<div class="line" data-line="'+r.source_index+'">'+
+        '<label><input data-include type="checkbox" '+(included?'checked ':'')+(locked?'disabled':'')+'> Gastpreisposition</label>'+
+        '<input data-description type="text" maxlength="160" value="'+e(desc)+'" '+(locked?'disabled':'')+'>'+
+        '<div class="money"><input data-gross type="number" step="0.01" min="0.01" value="'+e(gross)+'" '+(locked?'disabled':'')+'>'+
+        ' EUR <select data-rate '+(locked?'disabled':'')+'><option value="">USt prüfen</option>'+
+        ["0","7","19"].map(value=>'<option value="'+value+'" '+(value===rate?'selected':'')+'>'+value+' %</option>').join("")+
+        '</select></div></div>';
+    }).join("");
     const ignored=(s?.ignored_settlement_lines||[]).map(r=>
       '<li>'+e(r.description)+' · '+e(r.gross)+' EUR ('+
         (r.reason==="platform_commission"?"Portalprovision separat":"Storno-Abrechnung, nicht Gastumsatz")+
