@@ -77,6 +77,14 @@ def _export_payload(booking_id: str, booking: dict, draft: dict, runtime) -> dic
     if not proposed:
         raise ValueError("Hausnummer 13/14/15 ist nicht eindeutig")
     inv = draft["invoice"]
+    # Independently refuse an unbalanced Smoobu source even if an old HA
+    # draft had already requested a DEMO preview.
+    from decimal import Decimal, InvalidOperation
+    try:
+        if Decimal(str(inv["total_gross"])) != Decimal(str(booking["price"])):
+            raise ValueError("Smoobu-Betrag und Entwurf weichen ab: keine DEMO-Erzeugung")
+    except (InvalidOperation, TypeError, KeyError) as exc:
+        raise ValueError("Smoobu-Buchungsbetrag nicht validierbar") from exc
     return {
         "schema_version": "mittelhof.invoice-draft.v1",
         "booking_id": booking_id,
