@@ -369,20 +369,28 @@ class GuestThreadsView(HomeAssistantView):
     async def get(self, request: web.Request):
         _require_admin(request)
         runtime = _get_runtime(request.app["hass"])
+        threads = []
+        total_pages = 1
         try:
-            result = await runtime.api.get_message_threads(page_number=1, page_size=100)
+            for page in range(1, 6):
+                response = await runtime.api.get_message_threads(page_number=page, page_size=100)
+                total_pages = max(1, int(response.get("page_count") or 1))
+                if not isinstance(response.get("threads"), list):
+                    raise ValueError("Ungültiger Smoobu-Gesprächsindex")
+                threads.extend(t for t in response["threads"] if isinstance(t, dict)
+                               and int((t.get("apartment") or {}).get("id") or 0) in runtime.houses)
+                if page >= total_pages:
+                    break
         except Exception as exc:
             raise web.HTTPBadGateway(text="Smoobu-Posteingang nicht erreichbar") from exc
-        threads = [
-            thread for thread in result.get("threads", [])
-            if int((thread.get("apartment") or {}).get("id") or 0) in runtime.houses
-        ]
         summaries = await runtime.guest_drafts.list_summaries()
-        return self.json({"threads": threads, "unread_messages": result.get("unread_messages", 0),
-                          "page_count": result.get("page_count", 1),
-                          "drafts": summaries,
-                          "message_send_enabled": runtime.guest_message_send_enabled})
-
+        status = await runtime.guest_inbox.observe(threads, summaries, runtime.api)
+        return self.json({
+            "threads": threads, "page_count": total_pages,
+            "truncated": total_pages > 5, "drafts": summaries,
+            "message_send_enabled": runtime.guest_message_send_enabled,
+            **status,
+        })
 
 class GuestBookingView(HomeAssistantView):
     url = "/api/smoobu_mittelhof/guest/v1/bookings/{booking_id}"
@@ -393,12 +401,15 @@ class GuestBookingView(HomeAssistantView):
         _require_admin(request)
         runtime = _get_runtime(request.app["hass"])
         booking = await _checked_booking(runtime, booking_id)
+        addr, rows, warnings = await _billing_source(runtime, booking)
+        enriched = dict(booking, _guest_invoice_address=addr)
+        await runtime.guest_drafts.enrich_pristine(enriched)
         try:
             messages = await runtime.api.get_booking_messages(booking_id)
         except Exception as exc:
             raise web.HTTPBadGateway(text="Smoobu-Gespräch nicht erreichbar") from exc
+        await runtime.guest_inbox.mark_opened(booking_id, messages)
         draft = await runtime.guest_drafts.get(booking_id)
-        # Do not expose NUKI/guest-app tokens or unfiltered booking raw payload.
         return self.json({
             "booking": {
                 "id": booking.get("id"),
@@ -410,16 +421,16 @@ class GuestBookingView(HomeAssistantView):
                 "price": booking.get("price"),
                 "price_paid_flag": booking.get("price-paid"),
             },
-            "messages": messages,
-            "draft": draft,
+            "messages": messages, "draft": draft,
+            "source_lines": rows, "source_address": addr, "source_warnings": warnings,
             "invoice_preflight": invoice_preflight(draft["invoice"]) if draft else None,
             "proposed_invoice_number": planned_number(
                 runtime.houses.get(int((booking.get("apartment") or {}).get("id") or 0), ""),
                 str(booking.get("arrival") or ""),
             ),
-            "source_changed": bool(draft and (draft.get("source_change_pending") or draft["source_fingerprint"] != booking_fingerprint(booking))),
+            "source_changed": bool(draft and (draft.get("source_change_pending") or
+                             draft["source_fingerprint"] != booking_fingerprint(booking))),
         })
-
 
 class GuestDraftView(HomeAssistantView):
     url = "/api/smoobu_mittelhof/guest/v1/bookings/{booking_id}/draft"
@@ -430,7 +441,11 @@ class GuestDraftView(HomeAssistantView):
         _require_admin(request)
         runtime = _get_runtime(request.app["hass"])
         booking = await _checked_booking(runtime, booking_id)
-        return self.json(await runtime.guest_drafts.prepare(booking, acknowledge_source=True))
+        address, _, _ = await _billing_source(runtime, booking)
+        enriched = dict(booking, _guest_invoice_address=address)
+        draft = await runtime.guest_drafts.prepare(enriched, acknowledge_source=True)
+        await runtime.guest_drafts.enrich_pristine(enriched)
+        return self.json(await runtime.guest_drafts.get(booking_id) or draft)
 
     async def patch(self, request: web.Request, booking_id: str):
         _require_admin(request)
