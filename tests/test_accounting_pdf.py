@@ -76,8 +76,8 @@ class AccountingTest(unittest.TestCase):
 
     def test_long_document_creates_multiple_pages(self):
         p = core.prepare_booking(sample(), "Haus Test")
-        p["rows"] = ([{"description": "Zusatzleistung" + " X"*60,
-                      "gross":"1.00","quantity":1}] * 60)
+        p["rows"] = [{"source_index": i, "description": "Zusatzleistung" + " X"*60,
+                      "gross":"1.00","quantity":1} for i in range(60)]
         p["total_gross"]="60.00"
         snap=core.approve_snapshot(p,["7"]*60)
         pdf=core.render_pdf(snap)
