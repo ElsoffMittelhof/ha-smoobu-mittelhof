@@ -198,7 +198,64 @@ class AccountingUploadView(HomeAssistantView):
         return self.json({k: v for k, v in result.items() if k != "snapshot"})
 
 
+
+class AccountingBundleView(HomeAssistantView):
+    """Create a bounded ZIP of already reviewed PDFs and a CSV manifest.
+
+    Does not mark any record as imported into Lexware.
+    """
+    url = "/api/smoobu_mittelhof/guest/v1/accounting/bundle"
+    name = "api:smoobu_mittelhof:accounting_bundle"
+    requires_auth = True
+
+    async def post(self, request):
+        from io import BytesIO, StringIO
+        import csv
+        from zipfile import ZipFile, ZIP_DEFLATED
+        runtime = _accounting_runtime(request)
+        body = await _parse_body(request)
+        ids = body.get("booking_ids")
+        if (not isinstance(ids, list) or not 1 <= len(ids) <= 25 or
+                any(not isinstance(bid, str) or not bid.isdigit() for bid in ids) or
+                len(set(ids)) != len(ids)):
+            raise web.HTTPBadRequest(text="1 bis 25 unterschiedliche Buchungs-IDs erwartet")
+        items = []
+        for bid in ids:
+            source = await _current_source(runtime, bid)
+            record = await runtime.accounting.get(bid)
+            if not record or record["status"] not in ("ready", "uploaded_manually"):
+                raise web.HTTPConflict(text="Nicht freigegebener Buchhaltungsbeleg: " + bid)
+            if record["source_fingerprint"] != source["source_fingerprint"]:
+                raise web.HTTPConflict(text="Smoobu-Buchung zwischenzeitlich geändert: " + bid)
+            snapshot = record.get("snapshot")
+            if not isinstance(snapshot, dict) or snapshot.get("sha256") != record.get("sha256"):
+                raise web.HTTPConflict(text="Belegintegrität ungültig: " + bid)
+            items.append((bid, snapshot))
+        def bundle():
+            memory = BytesIO()
+            manifest = StringIO()
+            writer = csv.writer(manifest)
+            writer.writerow(["booking_id", "source_sha256", "pdf_sha256", "gross_eur", "channel"])
+            with ZipFile(memory, "w", compression=ZIP_DEFLATED) as archive:
+                for bid, snapshot in items:
+                    pdf = render_pdf(snapshot)
+                    name = "mittelhof-buchhaltungsbeleg-" + bid + "-" + snapshot["sha256"][:12] + ".pdf"
+                    archive.writestr(name, pdf)
+                    writer.writerow([bid, snapshot["sha256"], sha256(pdf).hexdigest(),
+                                     snapshot["total_gross"], snapshot["channel"]])
+                archive.writestr("manifest.csv", manifest.getvalue().encode("utf-8-sig"))
+            return memory.getvalue()
+        payload = await request.app["hass"].async_add_executor_job(bundle)
+        if len(payload) > 10_000_000:
+            raise web.HTTPRequestEntityTooLarge(max_size=10_000_000, actual_size=len(payload))
+        return self.json({
+            "filename": "mittelhof-lexware-belege.zip",
+            "zip_base64": base64.b64encode(payload).decode("ascii"),
+            "sha256": sha256(payload).hexdigest(), "count": len(items),
+        })
+
+
 def register_accounting_views(hass):
     for view in (AccountingListView(), AccountingBookingView(),
-                 AccountingPdfView(), AccountingUploadView()):
+                 AccountingPdfView(), AccountingUploadView(), AccountingBundleView()):
         hass.http.register_view(view)
