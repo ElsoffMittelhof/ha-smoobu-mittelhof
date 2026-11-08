@@ -40,6 +40,9 @@ def prepare_booking(booking, house):
     if total <= 0:
         raise ValueError("Buchungsbrutto muss positiv sein")
     source_rows, warnings = source_price_lines(booking)
+    # Smoobu numbers are EUR booking totals; never treat foreign currency amounts as EUR.
+    if any(str(w).startswith("Nicht-EUR-Position") for w in warnings):
+        raise ValueError("Fremdwährungs-Preisposition: kein automatischer EUR-Buchhaltungsbeleg")
     rows = []
     for row in source_rows:
         rows.append({
