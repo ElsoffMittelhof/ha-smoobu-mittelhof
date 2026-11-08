@@ -3,11 +3,19 @@ from __future__ import annotations
 
 import importlib.util
 from pathlib import Path
+import sys
+from types import ModuleType
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 source = ROOT / "custom_components" / "smoobu_mittelhof" / "guest_finance.py"
-spec = importlib.util.spec_from_file_location("guest_finance", source)
+pkg1 = ModuleType("custom_components")
+pkg1.__path__ = [str(ROOT / "custom_components")]
+pkg2 = ModuleType("custom_components.smoobu_mittelhof")
+pkg2.__path__ = [str(ROOT / "custom_components" / "smoobu_mittelhof")]
+sys.modules.setdefault("custom_components", pkg1)
+sys.modules.setdefault("custom_components.smoobu_mittelhof", pkg2)
+spec = importlib.util.spec_from_file_location("custom_components.smoobu_mittelhof.guest_finance", source)
 mod = importlib.util.module_from_spec(spec)
 assert spec.loader
 spec.loader.exec_module(mod)
