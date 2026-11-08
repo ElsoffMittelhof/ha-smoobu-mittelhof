@@ -336,7 +336,7 @@ class MittelhofGuestCard extends HTMLElement {
       changes = {invoice: this._collectInvoice()};
       // A delivered guest message is immutable. Never send a message patch
       // when only accounting fields are being edited after delivery.
-      if (!["sent", "sending", "delivery_unknown"].includes(d.message.status)) {
+      if (this._tab !== "invoices" && !["sent", "sending", "delivery_unknown"].includes(d.message.status)) {
         changes.message = {
           subject: this.shadowRoot.querySelector('[data-field="subject"]').value,
           body: this.shadowRoot.querySelector('[data-field="body"]').value
@@ -709,10 +709,6 @@ class MittelhofGuestCard extends HTMLElement {
       this._field("tax_note", "Steuerhinweis (fachlich prüfen)", inv.tax_note, true) +
       this._positionEditor(inv) +
       '<p class="warning">Nur DEMO-Mustervorschau im privaten Rechnungsdienst; keine echte Ausstellung oder Versand.</p>' +
-      '</section><section><h4>Nachrichtenentwurf</h4>' +
-      this._field("subject", "Betreff", msg.subject) +
-      this._field("body", "Nachricht", msg.body, true) +
-      '<p>Die Nachricht wird über Smoobu als Text gesendet. Es wird kein Rechnungsanhang mitgeschickt.</p>' +
       '</section></div><div class="actions">' +
       '<button data-op="prepare">Mit aktuellem Buchungsstand abgleichen</button>' +
       '<button data-op="save">Änderungen speichern</button>' +
@@ -743,13 +739,6 @@ class MittelhofGuestCard extends HTMLElement {
       '<button data-op="demo-correction" ' +
       (previewRequested && service?.review_state === "approved_preview" ? "" : "disabled") +
       '>Musterkorrektur begründet anfordern</button>' +
-      '<button data-op="regenerate" ' +
-      (msg.status === "draft" && !selected.source_changed ? "" : "disabled") +
-      '>Nachricht aus Zahlungsdaten erzeugen</button>' +
-      '<button data-op="approve" ' + (msg.status === "draft" && !selected.source_changed ? "" : "disabled") +
-      '>Nachricht freigeben</button>' +
-      '<button class="send" data-op="send" ' + (msg.status === "approved" && !selected.source_changed && this._inbox?.message_send_enabled ? "" : "disabled") +
-      '>Freigegebene Nachricht senden</button>' +
       '</div>';
     return html;
   }
