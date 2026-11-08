@@ -46,13 +46,13 @@ def _source_kind(element):
     label = str(element.get("name") or element.get("type") or "").strip().casefold()
     label = "".join(c for c in unicodedata.normalize("NFKD", label)
                     if not unicodedata.combining(c))
-    key = " ".join(label.replace("-", " ").split())
+    key = " ".join(label.replace("-", " ").replace("_", " ").split())
     role = SETTLEMENT_NAMES.get(key)
     if role:
         return role
-    if key in GUEST_PET_NAMES:
+    if key in GUEST_PET_NAMES or key.replace(" ", "") == "passthroughpetfee":
         return "dog"
-    if key in GUEST_EXTRA_NAMES:
+    if key in GUEST_EXTRA_NAMES or key.replace(" ", "") == "additionalguestfee":
         return "extra_person"
     return None
 
