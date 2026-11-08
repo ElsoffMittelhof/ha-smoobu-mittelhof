@@ -62,3 +62,9 @@ Die Gastanschrift wird zusätzlich aus `GET /api/guests/<guestId>` gelesen. Län
 - Gastsenden ist weiterhin default OFF. Keine Änderung an den lokalen Wäsche- und Node-RED-Portaldaten oder dem fünffachen Hauptdashboard.
 - Der separate private PDF-Dienst v0.7.0rc3 erzeugt weiterhin **nur DEMO**-Muster; es gibt keine rechtsverbindliche Rechnungsausstellung, keinen finalen GoBD-/WORM-Nachweis und keinen Gast-PDF-Versand.
 - Ein echter HA-Laufzeittest an der Betreiberinstallation steht noch aus. Vor dem Installieren: HA-Backup und Rollback auf v0.7.0 sichern.
+
+## Nachträge zur Vorabprüfung
+
+- Der initiale Kartenstart lädt den Smoobu-Posteingangs-Grundstand, danach ausschließlich die gewählte Ansicht und erst dann eine eventuell per Timeline-Deep-Link gewählte Buchung. So gehen keine Initial-Abfragen wegen paralleler Ladevorgänge verloren.
+- Eine ausgehende Gastgeberantwort löscht eine zuvor als neu erkannte und noch nicht geöffnete Gastnachricht nicht aus dem lokalen Posteingang. Nur das ausdrückliche Öffnen der Konversation setzt den lokalen Gelesen-Marker.
+- Diese neue Release-Version darf **nicht** stillschweigend produktiv installiert werden; bestehende HA-Version 0.7.0 bleibt bis zur echten Testabnahme aktiv. Die Rechnungsübersicht zeigt **Entwürfe**, keine rechtsverbindlich ausgestellten Rechnungen.
