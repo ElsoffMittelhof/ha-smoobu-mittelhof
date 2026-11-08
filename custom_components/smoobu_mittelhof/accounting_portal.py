@@ -159,9 +159,13 @@ class AccountingBookingView(HomeAssistantView):
         prepared = await _current_source(runtime, booking_id)
         record = await runtime.accounting.get(booking_id)
         changed = bool(record and record["source_fingerprint"] != prepared["source_fingerprint"])
+        public_record = ({k: v for k, v in record.items() if k != "snapshot"}
+                         if record else None)
+        if public_record is not None and isinstance(record.get("snapshot"), dict):
+            public_record["reviewed_rows"] = record["snapshot"].get("rows", [])
         return self.json({
             "source": prepared,
-            "record": {k: v for k, v in record.items() if k != "snapshot"} if record else None,
+            "record": public_record,
             "source_changed": changed,
         })
 
