@@ -2,7 +2,7 @@
 
 Custom Home Assistant integration for Smoobu reservations, booking calendars, laundry approval workflows, NUKI guest-code emails, and optional IT.NRW monthly statistics.
 
-Current public version: **0.7.0**. Existing 0.6.8 operational workflows stay compatible. The new guest inbox is **opt-in** and guest messages remain **off by default**. Read [the production upgrade and rollback guide](docs/release-0.7.0-production.md) before upgrading.
+Current public version: **0.7.2**. Existing NUKI/laundry/IT.NRW workflows remain unchanged. The guest center and new Lexware-L accounting PDF exports are opt-in, admin-only; guest messages and invoice issuance remain disabled. Read [the v0.7.2 production and rollback guide](docs/release-0.7.2-production.md) before upgrading.
 
 > Technical note: the integration domain remains `smoobu_mittelhof` for compatibility with installations from the private pre-release phase. The public integration contains no property-specific apartment IDs, email addresses, Home Assistant entity IDs, API credentials, or SMTP credentials.
 
@@ -254,3 +254,10 @@ MIT
 ### Separate manual checks from v0.6.8
 
 For NUKI-only checks call `smoobu_mittelhof.process_nuki_only` with `force_notify: true` if needed. For laundry-only restock alert checks use `smoobu_mittelhof.process_laundry_only` with `force_notify: true`. Both preserve stock authority in the staff portal and never send a supplier order without the existing approval action. The old combined service remains for compatibility with existing automations, but is intentionally not exposed on the dashboards.
+
+
+## Lexware Office L – internal booking accounting PDFs (v0.7.2)
+
+The optional administrator guest center offers a fourth **Buchhaltung** view via `custom:mittelhof-accounting-card`. Every active Smoobu booking can be reviewed for gross amount and tax lines, then exported as an internal accounting PDF or as part of a ZIP/CSV batch of up to 25 reviewed bookings. **Tax rates need explicit human review.** Smoobu payment flags are not used as confirmed payments. The document is **not** a guest invoice, does not send emails, and does not post to Lexware. After a manual Lexware L receipt upload an operator may mark the document as manually uploaded; altered source bookings block reused exports. For direct bookings where a guest invoice already documents the income, do not post the internal booking PDF as a second income. The future Lexware API adapter is not enabled on tariff L.
+
+Register exactly one JS module resource `/smoobu_mittelhof/frontend/mittelhof-accounting-card.js?v=0.7.2` and use the complete separate private guest-dashboard YAML with its fourth `Buchhaltung` view. See [release 0.7.2 instructions](docs/release-0.7.2-production.md).

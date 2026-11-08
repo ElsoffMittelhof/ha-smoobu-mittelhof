@@ -32,6 +32,10 @@ jobs:
         run: python tests/test_smoobu_sources.py
       - name: Test guest center separation and inbox/archive contracts
         run: python tests/test_guest_center_contract.py
+      - name: Test accounting PDF, tax validation and booking-ledger contract
+        run: python tests/test_accounting_pdf.py
+      - name: Test admin-only accounting APIs and isolated Lexware export
+        run: python tests/test_accounting_contract.py
 
   frontend-syntax:
     runs-on: ubuntu-latest
@@ -46,6 +50,8 @@ jobs:
         run: node --check custom_components/smoobu_mittelhof/frontend/mittelhof-laundry-card.js
       - name: Check guest card JavaScript
         run: node --check custom_components/smoobu_mittelhof/frontend/mittelhof-guest-card.js
+      - name: Check accounting card JavaScript
+        run: node --check custom_components/smoobu_mittelhof/frontend/mittelhof-accounting-card.js
 
   hassfest:
     runs-on: ubuntu-latest

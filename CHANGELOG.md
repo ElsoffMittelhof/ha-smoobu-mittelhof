@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.7.2 — 2026-11-08 (Lexware-L Buchhaltungsbelege)
+
+- Neues admin-geschütztes Buchhaltungsmodul für den **manuellen Lexware-Office-L-Einnahmenbeleg-Upload**: pro aktiver Smoobu-Buchung ein validierter, revisionsgebundener Buchhaltungsfall und ein internes PDF, das ausdrücklich keine Gastrechnung und keine Zahlungsaufforderung ist.
+- Smoobu-Brutto und Preispositionssumme werden strikt verglichen; Umsatzsteuer muss für **jede Position manuell bestätigt** werden. Fehlende/abweichende Smoobu-Daten blockieren die Freigabe, unbekannte Hinweise benötigen ausdrückliche Bestätigung. Keine Zahlungsbestätigung aus Smoobu-Feldern ableiten.
+- Neue vierte Gäste-Dashboardansicht **Buchhaltung**, separates responsive JS-Frontend, Einzel-PDF sowie ZIP von bis zu 25 bereits freigegebenen PDFs mit CSV-Manifest; revisionsgebundener manueller Marker `in Lexware hochgeladen`.
+- Private HA-Storage-Datei für exportbezogene Referenzen, Fingerprints und geprüfte Beleg-Snapshots. Nach Quellbuchungsänderung wird der Download gesperrt; bereits hochgeladene Belege werden niemals stillschweigend verändert.
+- Keine Lexware-API-Verbindung in Tarif L; spätere API-Anbindung kann denselben geprüften Snapshot nutzen. Kein automatischer Gastversand, keine Rechnungsausstellung, keine GoBD-/ZUGFeRD-Produktivfreigabe, keine eigene Zahlungsbuchhaltung.
+- Smoobu-Workflows für Wäsche, NUKI, IT.NRW sowie die Bestandsreplikation bleiben unverändert. Installation auf dem einzigen HA erst nach Backup und kontrolliertem Test. Details: `docs/release-0.7.2-production.md`.
+
 ## 0.7.1 — 2026-11-08 (Produktivversion Gästezentrum)
 
 - Die nach CI und Offline-Regressionen geprüften Funktionen aus 0.7.1rc1 sind in die vollständige reguläre Version 0.7.1 übernommen: getrennter Posteingang, Buchungssuche mit Konversation und Timeline-Deep-Link, selektierbare Rechnungsentwürfe.
