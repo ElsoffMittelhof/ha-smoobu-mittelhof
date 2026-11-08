@@ -19,7 +19,7 @@ class Contracts(unittest.TestCase):
     def test_admin_guard_for_all_accounting_routes(self):
         s=(ROOT/"accounting_portal.py").read_text()
         for name in ("AccountingListView","AccountingBookingView","AccountingPdfView",
-                     "AccountingUploadView","AccountingBundleView"):
+                     "AccountingUploadView","AccountingBundleView","AccountingInvoiceReferenceView"):
             chunk=s.split("class "+name+"(",1)[1].split("\nclass ",1)[0]
             self.assertIn("requires_auth = True",chunk,name)
             self.assertIn("_accounting_runtime(request)",chunk,name)
