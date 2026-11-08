@@ -10,6 +10,7 @@ class MittelhofAccountingCard extends HTMLElement {
     this._records = [];
     this._error = "";
     this._busy = false;
+    this._documentKind = "booking_record";
   }
   setConfig(config) { this._config = config || {}; }
   set hass(hass) {
@@ -40,19 +41,51 @@ class MittelhofAccountingCard extends HTMLElement {
   async _open(id) {
     await this._run(async()=>{
       this._selected=await this._api("GET","bookings/"+encodeURIComponent(id)+"/accounting");
+      this._documentKind=this._selected.record?.document_kind||this._selected.source.suggested_document_kind||"booking_record";
     });
+  }
+  _selectedEdits() {
+    return [...this.shadowRoot.querySelectorAll("[data-line]")].filter(el =>
+      el.querySelector("[data-include]")?.checked).map(el => ({
+      source_index: Number(el.dataset.line),
+      description: el.querySelector("[data-description]").value.trim(),
+      gross: el.querySelector("[data-gross]").value.trim(),
+      tax_rate: el.querySelector("[data-rate]").value
+    }));
   }
   async _review() {
     const current=this._selected;
-    if(!current || current.source_changed)return;
-    const rates=Array.from(this.shadowRoot.querySelectorAll("[data-rate]")).map(x=>x.value);
-    if(rates.length!==current.source.rows.length) {this._error="Steuersätze unvollständig";this._render();return;}
-    if(!window.confirm("Alle Steuersätze fachlich geprüft? Der interne Buchhaltungsbeleg ist keine Gastrechnung."))return;
+    if(!current||current.source_changed||this._documentKind!=="booking_record")return;
+    const edits=this._selectedEdits();
+    if(!edits.length || edits.some(x=>!x.tax_rate)) {
+      this._error="Mindestens eine Gastposition mit geprüftem Steuersatz erforderlich";
+      this._render();return;
+    }
+    if(!window.confirm("Gastpositionen, Änderungen und sämtliche Umsatzsteuersätze geprüft? Es wird KEINE Gastrechnung erstellt."))return;
     await this._run(async()=>{
       const id=current.source.booking_id;
       await this._api("POST","bookings/"+id+"/accounting",{
         source_fingerprint:current.source.source_fingerprint,
-        rates, confirm_warnings:true, confirm_tax_review:true,
+        document_kind:"booking_record",
+        edits:edits.map(({tax_rate,...rest})=>rest),
+        rates:edits.map(x=>x.tax_rate),
+        confirm_warnings:true,confirm_tax_review:true
+      });
+      this._selected=await this._api("GET","bookings/"+id+"/accounting");
+      this._records=(await this._api("GET","accounting")).records||[];
+    });
+  }
+  async _referenceInvoice() {
+    const current=this._selected;
+    if(!current||current.source_changed||this._documentKind!=="invoice")return;
+    const ref=this.shadowRoot.querySelector("[data-invoice-ref]")?.value?.trim()||"";
+    if(!ref){this._error="Externe Rechnungsnummer oder Belegreferenz fehlt";this._render();return;}
+    if(!window.confirm("Diese Rechnung ist bereits tatsächlich ausgestellt und in der Buchhaltung erfasst? Es wird hier keine Rechnung erzeugt."))return;
+    await this._run(async()=>{
+      const id=current.source.booking_id;
+      await this._api("POST","bookings/"+id+"/accounting/invoice-reference",{
+        source_fingerprint:current.source.source_fingerprint,
+        invoice_reference:ref,confirm_existing_invoice:true
       });
       this._selected=await this._api("GET","bookings/"+id+"/accounting");
       this._records=(await this._api("GET","accounting")).records||[];
@@ -60,7 +93,7 @@ class MittelhofAccountingCard extends HTMLElement {
   }
   async _download() {
     const selected=this._selected;
-    if(!selected || selected.source_changed)return;
+    if(!selected || selected.source_changed || selected.record?.document_kind==="invoice")return;
     await this._run(async()=>{
       const result=await this._api("GET","bookings/"+selected.source.booking_id+"/accounting/pdf");
       const raw=atob(result.pdf_base64);
@@ -76,7 +109,7 @@ class MittelhofAccountingCard extends HTMLElement {
   async _downloadBundle() {
     const visible=new Set((this._search?.bookings||[]).map(x=>String(x.booking_id)));
     const ids=this._records.filter(x=>visible.has(x.booking_id)&&
-      ["ready","uploaded_manually"].includes(x.status)).map(x=>x.booking_id).slice(0,25);
+      ["ready","uploaded_manually"].includes(x.status) && x.document_kind!=="invoice").map(x=>x.booking_id).slice(0,25);
     if(!ids.length){this._error="Keine freigegebenen Buchhaltungsbelege im gewählten Zeitraum";this._render();return;}
     if(!window.confirm(ids.length+" bereits geprüfte PDF-Belege als ZIP exportieren? Keine Lexware-Erfassung wird dadurch markiert."))return;
     await this._run(async()=>{
@@ -93,7 +126,7 @@ class MittelhofAccountingCard extends HTMLElement {
   }
   async _markUploaded() {
     const selected=this._selected;
-    if(!selected || selected.source_changed || !selected.record)return;
+    if(!selected || selected.source_changed || !selected.record || selected.record.document_kind==="invoice")return;
     if(!window.confirm("Hast du das PDF wirklich als Einnahmenbeleg in Lexware Office L hochgeladen und geprüft?"))return;
     await this._run(async()=>{
       const id=selected.source.booking_id;
