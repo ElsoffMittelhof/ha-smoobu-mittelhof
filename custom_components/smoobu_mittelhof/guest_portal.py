@@ -432,6 +432,109 @@ class GuestBookingView(HomeAssistantView):
                              draft["source_fingerprint"] != booking_fingerprint(booking))),
         })
 
+class GuestBookingSearchView(HomeAssistantView):
+    """Explicit historical and future booking search, never limited by inbox."""
+    url = "/api/smoobu_mittelhof/guest/v1/search-bookings"
+    name = "api:smoobu_mittelhof:guest_search_bookings"
+    requires_auth = True
+
+    async def get(self, request: web.Request):
+        _require_admin(request)
+        runtime = _get_runtime(request.app["hass"])
+        start = str(request.query.get("from") or "")
+        end = str(request.query.get("to") or "")
+        try:
+            first = date.fromisoformat(start)
+            last = date.fromisoformat(end)
+        except ValueError as exc:
+            raise web.HTTPBadRequest(text="Zeitraum bitte im Format JJJJ-MM-TT angeben") from exc
+        if not 0 <= (last - first).days <= 730:
+            raise web.HTTPBadRequest(text="Suchzeitraum auf höchstens 731 Tage begrenzt")
+        try:
+            bookings = await runtime.api.get_reservations(first, last)
+        except Exception as exc:
+            raise web.HTTPBadGateway(text="Smoobu-Buchungen im Zeitraum nicht abrufbar") from exc
+        valid = valid_bookings(bookings, runtime.houses)
+        values = []
+        for b in valid:
+            if b.get("is-blocked-booking"):
+                continue
+            apt = b.get("apartment") or {}
+            values.append({
+                "booking_id": str(b["id"]), "guest": b.get("guest-name"),
+                "house": runtime.houses.get(int(apt.get("id") or 0), apt.get("name")),
+                "apartment_id": int(apt.get("id") or 0),
+                "arrival": b.get("arrival"), "departure": b.get("departure"),
+                "created_at": b.get("created-at"), "channel": (
+                    (b.get("channel") or {}).get("name")
+                    if isinstance(b.get("channel"), dict) else b.get("channel")),
+            })
+        values.sort(key=lambda x: (str(x.get("arrival") or ""), x["booking_id"]))
+        return self.json({"bookings": values, "from": start, "to": end,
+                          "total": len(values)})
+
+
+class GuestInvoiceDraftsView(HomeAssistantView):
+    """Index existing HA drafts; DOES NOT claim any invoices were issued."""
+    url = "/api/smoobu_mittelhof/guest/v1/invoice-drafts"
+    name = "api:smoobu_mittelhof:guest_invoice_drafts"
+    requires_auth = True
+
+    async def get(self, request: web.Request):
+        _require_admin(request)
+        runtime = _get_runtime(request.app["hass"])
+        entries = await runtime.guest_drafts.list_summaries()
+        entries.sort(key=lambda x: (str(x.get("arrival") or ""), str(x.get("booking_id"))),
+                     reverse=True)
+        return self.json({"drafts": entries, "issued_invoices_supported": False,
+                          "description": "Nur Entwürfe und separat geprüfte DEMO-Muster; keine ausgestellten Rechnungen"})
+
+
+class GuestImportSmoobuView(HomeAssistantView):
+    """Explicit admin re-import of Smoobu amounts with revision/overwrite guard."""
+    url = "/api/smoobu_mittelhof/guest/v1/bookings/{booking_id}/import-smoobu"
+    name = "api:smoobu_mittelhof:guest_import_smoobu"
+    requires_auth = True
+
+    async def post(self, request: web.Request, booking_id: str):
+        _require_admin(request)
+        runtime = _get_runtime(request.app["hass"])
+        body = await _parse_body(request)
+        current = await runtime.guest_drafts.get(booking_id)
+        if current is None or type(body.get("revision")) is not int:
+            raise web.HTTPConflict(text="Aktueller Rechnungsentwurf erforderlich")
+        if body["revision"] != current["revision"]:
+            raise web.HTTPConflict(text="Entwurfsrevision veraltet")
+        if current.get("source_change_pending"):
+            raise web.HTTPConflict(text="Geänderte Smoobu-Buchung zuerst bestätigen")
+        if current["invoice"].get("status") != "draft":
+            raise web.HTTPConflict(text="Nur nicht ausgestellte Rechnungsentwürfe importierbar")
+        if current["revision"] > 2 and body.get("confirm_replace") is not True:
+            raise web.HTTPConflict(text="Manuell bearbeitete Positionen erfordern Bestätigung")
+        booking = await _checked_booking(runtime, booking_id)
+        if current["source_fingerprint"] != booking_fingerprint(booking):
+            raise web.HTTPConflict(text="Buchungsquelle geändert; zuerst Smoobu-Änderung bestätigen")
+        address, rows, warnings = await _billing_source(runtime, booking)
+        if booking.get("_price_elements_unavailable") or not booking.get("priceElements"):
+            raise web.HTTPConflict(text="Smoobu-Einzelpositionen fehlen; keine Übernahme des bloßen Gesamtbetrags")
+        patch = {"line_items": rows}
+        # Do not overwrite manually edited address fields; fill only empty ones.
+        for key, value in address.items():
+            if value and not str(current["invoice"].get(key) or "").strip():
+                patch[key] = value
+        if address.get("recipient_street") and not current["invoice"].get("recipient_address"):
+            patch["recipient_address"] = ", ".join(x for x in (
+                address.get("recipient_street"), address.get("recipient_postal_code"),
+                address.get("recipient_city"), address.get("recipient_country")) if x)
+        try:
+            result = await runtime.guest_drafts.revise(booking_id, current["revision"],
+                                                      {"invoice": patch})
+        except (ValueError, RuntimeError) as exc:
+            raise web.HTTPConflict(text=str(exc)) from exc
+        return self.json({"draft": result, "source_warnings": warnings,
+                          "source_total": booking.get("price"), "reimported": True})
+
+
 class GuestDraftView(HomeAssistantView):
     url = "/api/smoobu_mittelhof/guest/v1/bookings/{booking_id}/draft"
     name = "api:smoobu_mittelhof:guest_draft"
@@ -600,7 +703,7 @@ class GuestMessageActionView(HomeAssistantView):
 
 
 def register_guest_views(hass: HomeAssistant) -> None:
-    for view in (GuestThreadsView(), GuestBookingView(), GuestDraftView(), InvoiceDemoPreviewRequestView(), InvoiceDraftExportView(), GuestMessageActionView()):
+    for view in (GuestThreadsView(), GuestBookingSearchView(), GuestInvoiceDraftsView(), GuestImportSmoobuView(), GuestBookingView(), GuestDraftView(), InvoiceDemoPreviewRequestView(), InvoiceDraftExportView(), GuestMessageActionView()):
         hass.http.register_view(view)
 
 
