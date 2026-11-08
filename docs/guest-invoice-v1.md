@@ -1,0 +1,129 @@
+# Guest communication and invoice drafts — experimental V1
+
+Status: **feature branch / review only**. Do not release or enable against real guests until manually tested. No ZUGFeRD PDF generation, invoice issuance or PDF upload is included in this increment.
+
+## Implemented
+
+- Use the already configured HMAC client for:
+  - \`GET /api/threads\` (first inbox page, up to 100)
+  - \`GET /api/reservations/{id}?includePriceElements=true\`
+  - \`GET /api/reservations/{id}/messages\` (all pages, max 100)
+  - \`POST /api/reservations/{id}/messages/send-message-to-guest\` ONLY after two explicit admin actions.
+- Prepare an editable message and invoice **draft** for nonblocked bookings belonging to configured houses, up to 730 days in the future and 30 days in the past, at startup, on coordinator refresh, and independently every 30 minutes.
+- Drafts persist in an independent Home Assistant Store; message conversations themselves are read live and never copied to state attributes.
+- Edit billing name/address, line items (including discounts), total, amount already paid, payment confirmation, due date, payment method, explanatory/steering text and message subject/body.
+- Show a branded **non-issued** invoice preview with itemized gross totals and invoice preflight consistency checks (missing address, gross/line mismatch, pending tax review, payment uncertainty).
+- Compose booking messages in German or English; admin can explicitly regenerate from edited payment flow and verified amounts (never auto-send).
+- Keep guest sending **disabled server-side by default**. Explicitly enable it via integration options `guest_message_send_enabled` only in the controlled test environment. A message still requires individual approval and a separate Send click.
+- Require an admin account to view, edit, approve or send. Editing invalidates previous message approval.
+- Check a source booking fingerprint before edits, approval and send; stale data requires review again.
+- Before a send, persist \`sending\`. If Smoobu does not clearly confirm acceptance, record \`delivery_unknown\`, do not retry automatically, and manually check Smoobu to avoid duplicates.
+- Keep existing NUKI and laundry behavior unchanged.
+
+## Not yet implemented / intentionally blocked
+
+- Final ZUGFeRD/EN 16931 XML, PDF/A-3 rendering, validator, final tax calculations, invoice number allocation, immutable invoice ledger, correction/credit notes, archival policy and actual invoice send.
+- Template import from Smoobu and advanced per-channel message variants.
+- Multi-page inbox navigation beyond 100 conversations.
+- Smoobu invoice upload, invoice PDF attachments over Smoobu's messaging API, guaranteed guest delivery.
+- Full automated reconciliation of Booking.com/Airbnb/Naturhäuschen/TOMAS payments; channel name is NOT proof of guest payment.
+- Admin-only action does not constitute role-based audit/authentication for a separate multi-user invoicing system; plan audit/retention and tax verification before issuing.
+- Guest conversations are currently retrieved synchronously when opening a booking.
+- In production, keep `guest_message_send_enabled: false` until portal-specific sending behavior has been verified with safe test bookings.
+- Smoobu source changes remain flagged as stale during automatic synchronization, and only an explicit admin acknowledgement accepts the new source fingerprint. **The original invoice line edits are NOT overwritten**; compare them with the latest Smoobu figures afterwards.
+- Only the first page of the Smoobu inbox is displayed; the message history of each selected booking is paged in full (max 100 pages).
+- The seller profile and VAT regime are NOT read automatically from the homepage imprint. The private project contains a commented draft `invoice/issuer.example.yaml`, which requires manual legal and tax confirmation.
+
+## Installation on a disposable test Home Assistant only
+
+1. Install the **feature branch** into an isolated development Home Assistant, not a production upgrade; keep a full backup.
+2. In HA dashboard resources add exactly one JS-module resource:
+   \`/smoobu_mittelhof/frontend/mittelhof-guest-card.js?v=guest-v1-test\`
+3. Add a Lovelace card:
+   \`\`\`yaml
+   type: custom:mittelhof-guest-card
+   \`\`\`
+4. For logo preview, copy your private brand image to:
+   \`/config/www/smoobu_mittelhof/invoice-logo.png\`
+   It is served at \`/local/smoobu_mittelhof/invoice-logo.png\`. The public integration intentionally does not ship your private logo.
+5. As a Home Assistant administrator, read a real thread, prepare and **edit** a draft, save, and check that source changes invalidate approvals.
+6. Keep the new integration option `guest_message_send_enabled` **false** for all normal installations. Only enable it for a designated safe test booking/guest, and disable it after test. Validate sending using a designated safe test booking/guest only. The Send button sends a plain text message through Smoobu, **not a PDF**. No automatic send is enabled.
+7. Keep Smoobu's existing automatic guest templates enabled until replacements have been verified. Before activating overlapping HA templates, disable the corresponding Smoobu automation to prevent duplicate sends.
+
+## Privacy and operations
+
+\`/config/.storage/smoobu_mittelhof.guest_drafts\` contains personal data in invoice/message drafts and MUST NOT be committed, logged, exported as sensor attributes or put in InfluxDB. HA backups containing it need appropriate access and retention policies. Keep NUKI PINs out of drafts and invoices. Never use \`reset_all_workflow_state\` as a way to clean guest draft data.
+
+## Testing
+
+\`python tests/test_guest_finance.py\`, compile checks, \`node --check\` and existing hassfest/HACS CI. A real Smoobu sandbox test, browser visual test and accountant verification are required before deployment.
+
+## Invoice release gates
+
+A PDF that merely *looks* like an invoice is NOT a ZUGFeRD e-invoice. No final invoice is issued from this draft-only module.
+
+The next invoice engine will use ZUGFeRD 2.5.2/EN16931 in PDF/A-3, including consistent XML and visual totals, logo, seller identity, tax categories, discounts, payment accounting and validation. Issuance must be blocked until all of the following are present:
+- Confirmed legally correct seller identity and tax status (homepage imprint is a starting point only).
+- Explicit recipient address, separate tax categories/line bases, and line/total reconciliation.
+- Trustworthy payment evidence, no automatic paid status based on booking channel alone.
+- Unique collision-safe invoice number and immutable ledger with corrective documents, never overwriting an issued invoice.
+- PDF/A-3 and embedded XML extraction/EN16931 Schematron validation with a known-good validator such as Mustangproject, test vectors including mixed tax rates and cancellations.
+- Full privacy/backup, retention, concurrency, availability, and real HA/UI testing before release.
+
+
+- The 30-minute synchronization is serialized and runs outside startup-critical Wäsche/NUKI setup. Smoobu source-difference acknowledgement is explicit; pending edits remain preserved.
+
+## Rechnungsnummern und Test-Brücke zu Mittelhof (Entwicklungsstufe 2026-11-07)
+
+- **Vorgegebener Nummernaufbau:** `<Hausnummer><Jahr der Anreise><Monat der Anreise><Tag der Anreise>` ohne Trennzeichen, genau zehn Ziffern. Beispiele: `1320261210`, `1420270105`, `1520270718`.
+- Hausnummern ausschließlich **13, 14, 15**; Datum ausschließlich gültiges Smoobu-Anreisedatum; nicht Rechnungsdatum. Der HA-Nummervorschlag ist eine **nicht reservierte Anzeige**, keine Rechnungsvergabe.
+- Die Zuordnung stammt aus dem lokal konfigurierten Smoobu-Unterkunftsnamen und wird nur bei eindeutigem `Haus 13`/`Ferienwohnung 14` u.ä. angezeigt. Mehrdeutige Namen oder Datumsangaben **sperren den Export**.
+- Das private Nummernjournal prüft Nummernkollisionen transaktional: Bei zwei Buchungen desselben Hauses mit gleichem Anreisedatum gibt es **keinen stillschweigenden Suffix** und keine doppelte Rechnung. Umbuchungen mit neuer Anreise erfordern gesonderte manuelle Prüfung.
+- Bearbeitbare Rechnungsempfänger-Anschrift jetzt zusätzlich strukturiert: Straße, Postleitzahl, Ort, ISO-Ländercode. Eine Freitextadresse allein ist nicht ausreichend für EN16931.
+- Authentifizierter, **nur für HA-Administratoren** zugänglicher Lese-Endpunkt: `GET /api/smoobu_mittelhof/guest/v1/bookings/{booking_id}/invoice-export`. Er liefert nur die freigegebenen Entwurfsfelder und Buchungsbezüge, **keine** Gastnachrichten, NUKI-Codes, Bank- oder Smoobu-API-Schlüssel. Bei geänderter Smoobu-Buchung sperrt er den Export.
+- Die Lovelace-Karte zeigt die geplante Nummer und bietet einen expliziten JSON-Export mit personenbezogenen Daten. Exportierte Dateien **nur lokal und geschützt** behandeln, keinesfalls in GitHub oder unsichere Chat-/Mail-Systeme hochladen.
+- Der private Rechnungs-Engine-Branch kann den Export entweder als lokale JSON-Datei übernehmen oder über eine mit `MITTELHOF_HA_TOKEN` authentifizierte HTTPS-/Loopback-Abfrage direkt aus HA holen. Die Zuordnung Smoobu-Apartment-ID → Hausnummer wird **nochmals unabhängig** im privaten Dienst geprüft.
+- Der private Renderer bleibt im **TEST-Modus**: In XML/PDF steht `DEMO-1320261210`, im Entwurf wird die künftige Originalnummer `1320261210` gezeigt. Damit entsteht **noch keine ausgestellte Rechnung**. Zusätzliche Steuerprüfung, GoBD-Archivierung, echte Nummernvergabe und HA-Laufzeittests sind weiterhin Release-Blocker.
+- Der private SQLite-Proposal-Journal-Hash-Verlauf schützt Tests auf logische Konsistenz, ist **kein manipulationssicheres GoBD-Belegarchiv**. Er wird nicht in GitHub oder Recorder synchronisiert.
+
+## Stufe 4 (2026-11-07): separate DEMO-Musterprüfungsanfrage
+
+Die Lovelace-Gastkarte enthält jetzt einen ausdrücklich beschrifteten Button zur DEMO-ZUGFeRD-Musterprüfung. Damit wird KEINE Rechnung erstellt, ausgestellt, freigegeben oder versendet.
+
+- POST /api/smoobu_mittelhof/guest/v1/bookings/{booking_id}/preview-request ist ausschließlich für angemeldete Home-Assistant-Administratoren verfügbar.
+- Zuerst müssen die strukturierte Empfängeranschrift, Brutto- und Positionssumme, 7%-/19%-Teststeuersätze sowie Zahlungsweg und Zahlungsprüfung in HA manuell gepflegt und die Revision gespeichert sein.
+- Nur ein aktueller Smoobu-Buchungs-Fingerprint mit eindeutigem Haus 13, 14 oder 15 wird akzeptiert.
+- Die Anforderung speichert state=requested und requested_revision für genau den gespeicherten Entwurf. Änderungen oder ein geänderter Smoobu-Buchungsstand machen die Anforderung ungültig.
+- Erst nach der Anforderung ist der read-only Export aus HA möglich. Der JSON-Export enthält preview_request={state:requested, revision:source_revision} und bleibt personenbezogen, deshalb lokal schützen.
+- Im privaten Mittelhof-Draft-PR #10 übernimmt die Test-Engine ausschließlich solche passenden Exporte. Der DEMO-Beleg wird danach manuell per PDF/XML-Prüfung geprüft und kann in einem separaten privaten TEST-Archiv mit Hash-Integritätsprüfung abgelegt werden.
+- Das private Testarchiv ist keine revisionssichere GoBD-/WORM-Rechnungsablage. Keine finale Nummernvergabe, kein Ausstellen, kein PDF-Anhang und kein Gastversand.
+
+Die bestehende produktive HACS-Integration und alle Wäsche-/NUKI-/IT.NRW-Workflows bleiben unverändert. Vor einem echten HA-Einsatz sind Laufzeit-/UI-Tests im Testsystem erforderlich.
+
+## Mittelhof-Positionen und Umsatzsteuer – aktualisiert 2026-11-07
+
+Für die aktuelle Mittelhof-Beherbergung wurden vom Betreiber genau fünf Positionsarten genannt:
+- `rent` – **Miete**, zwingend genau eine Position.
+- `cleaning` – **Reinigung**, maximal eine Position.
+- `extra_person` – **zusätzliche Person**, insgesamt höchstens zwei.
+- `dog` – **Hund**, insgesamt höchstens zwei in der Unterkunft mituntergebrachte Tiere.
+- `stay_discount` – **Nachlass nach Mietdauer**, genau eine negative Position möglich; Anzahl Übernachtungen und die vom Betreiber manuell bestätigte Rabattstaffel müssen übereinstimmen.
+
+Im HA-Rechnungskarteneditor sind die Positionen über strukturierte Felder bearbeitbar: Art, Beschreibung, Menge, Gesamtbrutto dieser Menge, gegebenenfalls Nachlassregel und Übernachtungen. Pro Kategorie wird genau 7 % an die private ZUGFeRD-Engine übertragen. Andere oder nicht eingeordnete Smoobu-Preispositionen werden nicht als '7 %' geraten; der Bearbeiter muss sie zuvor einer der bekannten Kategorien zuordnen.
+
+Der Steuersatz 7 % entspricht für diese Beherbergungsleistungen der bestätigten Betreiberpolicy. Reinigung der vermieteten Räume und Mitunterbringung von Tieren sind in Abschnitt 12.16 Abs. 4 UStAE des BMF ausdrücklich als begünstigte Leistungen genannt. Eine eigenständige Tierpension oder sonstige Zusatzleistung ist davon nicht automatisch abgedeckt. https://ao.bundesfinanzministerium.de/usth/2024/A-Umsatzsteuergesetz/IV-Steuer-und-Vorsteuer/Paragraf-12/ae-12-16.html
+
+Die genaue automatische Rabattstaffel nach Mietdauer wurde noch nicht definiert; deshalb wird KEIN Nachlass eigenständig berechnet oder geschätzt. Der Nutzer muss den Betrag und die Staffel manuell bestätigen. Cent-/Steuerdifferenzen blockieren die ZUGFeRD-Testdokumenterstellung.
+
+Die private Rechnungssteller-/Bank-Konfiguration liegt ausschließlich beim eigenen Rechnungsdienst. Im öffentlichen HACS-Repository befinden sich **keine** echten Namen, USt-IDs, IBANs oder BICs. Release-Kandidat bis zur echten HA- und Steuerabnahme weiterhin nur DEMO.
+
+
+## Bestätigter Mietdauernachlass – ab 0.7.0rc3
+
+- 1–7 Übernachtungen: 0 % Nachlass.
+- **Ab der 8. Übernachtung: 10 % auf die gesamte Brutto-Miete**, nicht auf Reinigung, Zusatzpersonen oder Hunde. Der gesamte Mietbetrag erhält ab Erreichen der acht Nächte den Nachlass; nicht nur Nächte ab der achten.
+- Die Rabattposition wird beim Speichern einer als `rent` eingestuften Mietposition automatisch als negatives 7-%-Entgelt erzeugt/ersetzt und nach `ROUND_HALF_UP` auf volle Cent gerundet. Mehrfaches Speichern addiert den Rabatt nicht mehrfach.
+- HA zeigt den nach Nachlass berechneten Bruttogesamtbetrag; im privaten Demo-ZUGFeRD-Backend wird die Staffel unabhängig noch einmal überprüft und ein falscher/manuell erfundener Betrag gesperrt.
+- Bei nicht klassifizierten Smoobu-Preispositionen keine automatische Rabattierung oder Änderung des überlieferten Gesamtbetrags. Erst die Mietposition manuell zuordnen. Die Quellsumme kann bereits Rabatte enthalten; Bearbeiter müssen die Positionen abgleichen, bevor eine DEMO-Musterrechnung angefordert wird.
+- Beispiel 8 Nächte, Miete 1.000 €, Reinigung 80 €, Hund 40 € → Mietdauernachlass −100 €, Rechnungsbrutto 1.020 € (7 % innerhalb der Bruttozahlen).
+- Produktive Rechnungsausstellung und Gastversand weiterhin nicht aktiviert.
