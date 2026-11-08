@@ -24,6 +24,83 @@ DRAFT_STORAGE_KEY = f"{DOMAIN}.guest_drafts"
 DRAFT_STORAGE_VERSION = 1
 
 
+class GuestInboxState:
+    """Private HA read markers (not Smoobu's shared read state).
+
+    Existing threads/bookings become a baseline on initial use, so a first
+    install cannot flood the new inbox with years of old activity.
+    """
+
+    def __init__(self, hass: HomeAssistant) -> None:
+        self._store = Store[dict[str, Any]](hass, 1, f"{DOMAIN}.guest_inbox_state")
+        self._lock = asyncio.Lock()
+        self._state: dict[str, Any] = {}
+
+    async def async_load(self) -> None:
+        old = await self._store.async_load()
+        self._state = old if isinstance(old, dict) else {}
+
+    async def observe(self, threads: list[dict], drafts: list[dict], api) -> dict:
+        async with self._lock:
+            last_seen = self._state.setdefault("last_seen", {})
+            pending = self._state.setdefault("pending_messages", {})
+            seen_bookings = self._state.setdefault("seen_bookings", {})
+            if not self._state.get("initialized"):
+                for t in threads:
+                    bid = str((t.get("booking") or {}).get("id") or "")
+                    latest = str((t.get("latest_message") or {}).get("id") or "")
+                    if bid.isdigit() and latest:
+                        last_seen[bid] = latest
+                for d in drafts:
+                    bid = str(d.get("booking_id") or "")
+                    if bid.isdigit():
+                        seen_bookings[bid] = True
+                self._state["initialized"] = True
+                await self._store.async_save(self._state)
+                return {"new_bookings": [], "new_messages": [], "initial_snapshot": True,
+                        "message_scan_limit_reached": False}
+            changed = []
+            for t in threads:
+                bid = str((t.get("booking") or {}).get("id") or "")
+                latest = str((t.get("latest_message") or {}).get("id") or "")
+                if bid.isdigit() and latest and latest != last_seen.get(bid) and latest != pending.get(bid):
+                    changed.append((bid, latest))
+            # Only changed threads trigger extra Smoobu traffic. If 30+ change,
+            # do not mark the remainder as read; retry on next refresh.
+            for bid, latest in changed[:30]:
+                try:
+                    messages = await api.get_booking_messages(bid)
+                    match = next((m for m in messages if str(m.get("id")) == latest), None)
+                except Exception:
+                    continue
+                if match is not None and str(match.get("type")) == "1":
+                    pending[bid] = latest
+                elif match is not None:
+                    last_seen[bid] = latest
+                    pending.pop(bid, None)
+            new_ids = [d for d in drafts
+                       if str(d.get("booking_id") or "").isdigit()
+                       and str(d.get("booking_id") or "") not in seen_bookings]
+            await self._store.async_save(self._state)
+            visible = {str((t.get("booking") or {}).get("id") or "") for t in threads}
+            return {
+                "new_messages": [bid for bid in pending if bid in visible],
+                "new_bookings": new_ids[:100],
+                "initial_snapshot": False,
+                "message_scan_limit_reached": len(changed) > 30,
+            }
+
+    async def mark_opened(self, booking_id: str, messages: list[dict]) -> None:
+        ids = [int(m["id"]) for m in messages
+               if str(m.get("id") or "").isdigit()]
+        async with self._lock:
+            self._state.setdefault("seen_bookings", {})[booking_id] = True
+            if ids:
+                self._state.setdefault("last_seen", {})[booking_id] = str(max(ids))
+            self._state.setdefault("pending_messages", {}).pop(booking_id, None)
+            await self._store.async_save(self._state)
+
+
 class GuestDraftRepository:
     """Serialized HA Store writes and read-only snapshots with no entity exposure."""
 
@@ -55,6 +132,10 @@ class GuestDraftRepository:
                     "message_status": d.get("message", {}).get("status"),
                     "revision": d.get("revision"),
                     "updated_at": d.get("updated_at"),
+                    "guest": (d.get("booking_context") or {}).get("guest"),
+                    "house": (d.get("booking_context") or {}).get("house"),
+                    "arrival": (d.get("booking_context") or {}).get("arrival"),
+                    "departure": (d.get("booking_context") or {}).get("departure"),
                 }
                 for key, d in self._drafts.items()
             ]
