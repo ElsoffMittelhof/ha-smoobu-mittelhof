@@ -44,24 +44,26 @@ class AccountingRepository:
                  "source_fingerprint": value.get("source_fingerprint"),
                  "sha256": value.get("sha256"),
                  "reviewed_at": value.get("reviewed_at"),
-                 "uploaded_at": value.get("uploaded_at")}
+                 "uploaded_at": value.get("uploaded_at"),
+                 "document_kind": value.get("document_kind", "booking_record"),
+                 "invoice_reference": value.get("invoice_reference") }
                 for bid, value in self._records.items()
             ]
 
-    async def approve(self, prepared, rates):
-        snapshot = approve_snapshot(prepared, rates)
+    async def approve(self, prepared, rates, edits=None):
+        snapshot = approve_snapshot(prepared, rates, edits)
         bid = prepared["booking_id"]
         async with self._lock:
             previous = self._records.get(bid)
-            if previous and previous.get("status") == "uploaded_manually":
+            if previous and previous.get("status") in ("uploaded_manually", "invoice_reference"):
                 if previous.get("sha256") != snapshot["sha256"]:
-                    raise ValueError("Bereits als hochgeladen markiert: Änderung erfordert manuellen Korrekturprozess")
+                    raise ValueError("Bereits als hochgeladen oder Rechnung referenziert: manuellen Korrekturprozess verwenden")
                 return deepcopy(previous)
             now = datetime.now(timezone.utc).isoformat(timespec="seconds")
             record = {
                 "status": "ready", "source_fingerprint": snapshot["source_fingerprint"],
                 "sha256": snapshot["sha256"], "reviewed_at": now, "uploaded_at": None,
-                "snapshot": snapshot,
+                "snapshot": snapshot, "document_kind": "booking_record",
             }
             # Never overwrite a reviewed export with an unreviewed Smoobu update.
             self._records[bid] = record
@@ -79,6 +81,36 @@ class AccountingRepository:
                 raise ValueError("Beleg nicht exportbereit")
             record["status"] = "uploaded_manually"
             record["uploaded_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+            await self._store.async_save({"records": self._records})
+            return deepcopy(record)
+
+
+    async def set_invoice_reference(self, prepared, reference):
+        """Record an EXISTING outside-issued invoice; never create one here."""
+        bid = prepared["booking_id"]
+        if (not isinstance(reference, str) or not reference.strip()
+                or len(reference.strip()) > 120
+                or any(ord(ch) < 32 for ch in reference)):
+            raise ValueError("Gültige externe Rechnungsreferenz erforderlich")
+        async with self._lock:
+            old = self._records.get(bid)
+            if old and old.get("status") == "uploaded_manually":
+                raise ValueError("Buchungsbeleg bereits in Lexware erfasst: Dublette zuerst manuell klären")
+            if old and old.get("status") == "invoice_reference":
+                if (old.get("invoice_reference") == reference.strip() and
+                        old.get("source_fingerprint") == prepared["source_fingerprint"]):
+                    return deepcopy(old)
+                raise ValueError("Bestehende Rechnungsreferenz darf nicht überschrieben werden")
+            now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+            record = {
+                "status": "invoice_reference",
+                "document_kind": "invoice",
+                "invoice_reference": reference.strip(),
+                "source_fingerprint": prepared["source_fingerprint"],
+                "sha256": None, "snapshot": None,
+                "reviewed_at": now, "uploaded_at": None,
+            }
+            self._records[bid] = record
             await self._store.async_save({"records": self._records})
             return deepcopy(record)
 
@@ -144,7 +176,31 @@ class AccountingBookingView(HomeAssistantView):
         if body.get("confirm_tax_review") is not True:
             raise web.HTTPConflict(text="Steuerpositionen müssen explizit geprüft werden")
         try:
-            record = await runtime.accounting.approve(prepared, body.get("rates"))
+            if body.get("document_kind", "booking_record") != "booking_record":
+                raise ValueError("Gastrechnungen werden nicht über PDF-Buchungsbelege ausgestellt")
+            record = await runtime.accounting.approve(prepared, body.get("rates"), body.get("edits"))
+        except ValueError as exc:
+            raise web.HTTPConflict(text=str(exc)) from exc
+        return self.json({k: v for k, v in record.items() if k != "snapshot"})
+
+
+class AccountingInvoiceReferenceView(HomeAssistantView):
+    """Admin confirms an existing issued invoice number, NOT issuing it."""
+    url = "/api/smoobu_mittelhof/guest/v1/bookings/{booking_id}/accounting/invoice-reference"
+    name = "api:smoobu_mittelhof:accounting_invoice_reference"
+    requires_auth = True
+
+    async def post(self, request, booking_id):
+        runtime = _accounting_runtime(request)
+        body = await _parse_body(request)
+        source = await _current_source(runtime, booking_id)
+        if source["source_fingerprint"] != body.get("source_fingerprint"):
+            raise web.HTTPConflict(text="Quellbuchung wurde geändert")
+        if body.get("confirm_existing_invoice") is not True:
+            raise web.HTTPConflict(text="Bereits ausgestellte Gastrechnung ausdrücklich bestätigen")
+        try:
+            record = await runtime.accounting.set_invoice_reference(
+                source, body.get("invoice_reference"))
         except ValueError as exc:
             raise web.HTTPConflict(text=str(exc)) from exc
         return self.json({k: v for k, v in record.items() if k != "snapshot"})
@@ -257,5 +313,6 @@ class AccountingBundleView(HomeAssistantView):
 
 def register_accounting_views(hass):
     for view in (AccountingListView(), AccountingBookingView(),
-                 AccountingPdfView(), AccountingUploadView(), AccountingBundleView()):
+                 AccountingPdfView(), AccountingUploadView(), AccountingBundleView(),
+                 AccountingInvoiceReferenceView()):
         hass.http.register_view(view)
