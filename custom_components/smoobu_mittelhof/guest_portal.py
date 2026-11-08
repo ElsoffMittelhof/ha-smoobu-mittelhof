@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 from copy import deepcopy
 from datetime import date, timedelta
+from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from aiohttp import web
@@ -328,6 +329,24 @@ async def _billing_source(runtime, booking: dict) -> tuple[dict, list[dict], lis
         warnings.append("ISO-Ländercode konnte aus Smoobu nicht sicher zugeordnet werden")
     return address, rows, warnings
 
+def _invoice_source_preflight(booking: dict, draft: dict | None) -> dict | None:
+    if not draft:
+        return None
+    report = invoice_preflight(draft["invoice"])
+    try:
+        source = Decimal(str(booking.get("price")))
+        current = Decimal(str(draft["invoice"].get("total_gross")))
+        if source != current:
+            report["errors"].append(
+                f"Smoobu-Buchungsbetrag {source:.2f} EUR stimmt nicht mit "
+                f"Rechnungsentwurf {current:.2f} EUR überein – kein zusätzlicher "
+                "Rabatt ohne bestätigte Smoobu-Quelle"
+            )
+    except (ValueError, TypeError, InvalidOperation):
+        report["errors"].append("Smoobu-Gesamtbetrag nicht verifizierbar")
+    return report
+
+
 def _require_admin(request: web.Request) -> None:
     user = request.get("hass_user")
     if user is None or not user.is_admin:
@@ -423,7 +442,7 @@ class GuestBookingView(HomeAssistantView):
             },
             "messages": messages, "draft": draft,
             "source_lines": rows, "source_address": addr, "source_warnings": warnings,
-            "invoice_preflight": invoice_preflight(draft["invoice"]) if draft else None,
+            "invoice_preflight": _invoice_source_preflight(booking, draft),
             "proposed_invoice_number": planned_number(
                 runtime.houses.get(int((booking.get("apartment") or {}).get("id") or 0), ""),
                 str(booking.get("arrival") or ""),
@@ -589,6 +608,9 @@ class InvoiceDemoPreviewRequestView(HomeAssistantView):
         label = runtime.houses.get(apartment_id, "")
         if not planned_number(label, str(booking.get("arrival") or "")):
             raise web.HTTPConflict(text="Hausnummer 13/14/15 muss eindeutig zugeordnet sein")
+        source_report = _invoice_source_preflight(booking, draft)
+        if source_report and source_report["errors"]:
+            raise web.HTTPConflict(text="Smoobu-Beträge und Rechnung vor Musterprüfung abgleichen")
         payload = await _parse_body(request)
         try:
             revision = int(payload["revision"])
