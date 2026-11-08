@@ -41,6 +41,16 @@ class TestGuestCenterContract(unittest.TestCase):
         self.assertIn('Gespräch / Rechnungsentwurf öffnen',timeline)
         self.assertIn('encodeURIComponent(id)',timeline)
 
+    def test_cold_dashboard_start_serializes_view_fetch_and_deep_link(self):
+        text=(ROOT/"frontend/mittelhof-guest-card.js").read_text()
+        setter=text.split("  set hass(value) {",1)[1].split("  getCardSize()",1)[0]
+        self.assertIn("void this._initialize(bid);",setter)
+        self.assertIn("await this._loadInbox();",setter)
+        self.assertIn('if (this._tab === "bookings") await this._loadBookings();',setter)
+        self.assertIn('else if (this._tab === "invoices") await this._loadInvoiceDrafts();',setter)
+        self.assertIn("if (/^\\d{1,18}$/.test(bid)) await this._open(bid);",setter)
+        self.assertNotIn("this._loadInbox();\n      if (this._tab",setter)
+
     def test_guest_portal_still_opt_in_with_guest_send_off(self):
         init=(ROOT/"__init__.py").read_text()
         self.assertIn('if runtime.guest_portal_enabled:',init)
