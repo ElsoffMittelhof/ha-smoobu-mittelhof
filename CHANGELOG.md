@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.7.1rc1 — 2026-11-08 (Staging-Vorabversion)
+
+- Gästeverwaltung in drei Arbeitsbereiche getrennt: **Posteingang** nur für neu erkannte Gastnachrichten/Neubuchungen, **Buchungen** mit manueller Zeitraumsuche und vollständigem Smoobu-Gespräch je Buchung, **Rechnungen** mit gesonderter indexierter Liste der gespeicherten Rechnungsentwürfe.
+- Lokale HA-Lesemarkierungen (eigener privater Store) statt Änderungen an Smoobuus globalem Posteingang; erster Abruf legt den historischen Basisbestand fest.
+- Smoobu-Preispositionen bei leerer Detailantwort erneut aus `/api/reservations/<id>/price-elements` laden. Zuordnung der vier Betreiberpositionen inkl. Preis und Menge, mit Testfall 355 € Miete + 55 € Reinigung + 35 € Hund + 30 € zusätzliche Person = 475 €. Unbekannte Extras/manuell abweichende Steuern werden nicht geraten.
+- Gastanschrift samt ISO-Ländercode zusätzlich aus `/api/guests/<guestId>` übernehmen. Nur unbearbeitete alte Entwürfe automatisch anreichern, bearbeitete Entwürfe ausschließlich nach ausdrücklicher Importbestätigung.
+- Unabhängige Sperre von DEMO-PDF-Erstellung bei Abweichung zwischen Smoobu-Buchungsgesamtpreis und Rechnungsentwurf, um versehentliche doppelte Langzeitrabatte zu vermeiden.
+- Timeline-Karte mit optionalem `guest_dashboard_path`: bei Auswahl einer Belegung direkt zur betreffenden Gästekonversation wechseln.
+- Alle neuen Endpunkte Admin-only; Gastnachrichtenversand weiter deaktiviert, keine echte Rechnungsausstellung. Fünf-Views-Mittelhof-Hauptdashboard, Wäsche, NUKI und IT.NRW unverändert.
+- Dokumentation: `docs/release-0.7.1rc1.md`. Erst nach eigenständiger HA-Stagingprüfung als stabilen Produktivstand einsetzen.
+
 ## 0.7.0 — 2026-11-07
 
 - Stable, backward-compatible Smoobu Workflow update from v0.6.8 for existing Mittelhof Home Assistant installations. The domain `smoobu_mittelhof`, platform entities and existing NUKI/laundry/IT.NRW workflows remain unchanged.
