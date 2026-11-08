@@ -42,8 +42,9 @@ class TestSmoobuSources(unittest.TestCase):
         b["price"]=485
         b["priceElements"].append({"id":5,"type":"addon","name":"Parkplatz","amount":10})
         rows,warnings=module.source_price_lines(b)
-        self.assertEqual(rows[-1]["position_type"],"")
-        self.assertEqual(rows[-1]["tax_rate"],"")
+        unknown=next(row for row in rows if row["description"]=="Parkplatz")
+        self.assertEqual(unknown["position_type"],"")
+        self.assertEqual(unknown["tax_rate"],"")
         self.assertTrue(any("Unbekannte" in x for x in warnings))
 
     def test_no_source_details_keeps_total_but_does_not_invent_types(self):
