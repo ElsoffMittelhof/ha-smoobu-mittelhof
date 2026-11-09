@@ -19,13 +19,35 @@ class MittelhofAccountingCard extends HTMLElement {
   }
   getCardSize() { return 10; }
   static esc(s) { return String(s??"").replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+  static errorText(error) {
+    // HA callApi may supply a structured {message:{...}} response rather than
+    // a JavaScript Error. Never show the useless "[object Object]" placeholder.
+    const read = (value, depth=0) => {
+      if (depth>5 || value == null) return "";
+      if (typeof value==="string") return value.trim();
+      if (typeof value==="number") return String(value);
+      if (typeof value!=="object") return "";
+      if (Array.isArray(value)) return value.map(v=>read(v,depth+1)).filter(Boolean).join("; ");
+      for (const key of ["message","error","detail","text","body","description","reason"]) {
+        const result=read(value[key],depth+1);
+        if(result && result!=="[object Object]")return result;
+      }
+      if(typeof value.status==="number")return "HTTP "+value.status;
+      if(typeof value.code==="number")return "HTTP "+value.code;
+      return "";
+    };
+    const detail=read(error);
+    const status=error?.status||error?.code;
+    const prefix=Number.isInteger(status)?"HTTP "+status+": ":"";
+    return (prefix+detail).trim()||"Die Anfrage konnte nicht verarbeitet werden. Home-Assistant-Protokoll prüfen.";
+  }
   async _api(method, path, data) {
     return this._hass.callApi(method, "smoobu_mittelhof/guest/v1/"+path, data);
   }
   async _run(fn) {
     if(this._busy)return;
     this._busy=true; this._error=""; this._render();
-    try { await fn(); } catch(e) { this._error=String(e?.message||e); }
+    try { await fn(); } catch(e) { this._error=MittelhofAccountingCard.errorText(e); }
     finally {this._busy=false;this._render();}
   }
   async _refresh() {
@@ -179,12 +201,14 @@ class MittelhofAccountingCard extends HTMLElement {
       const included=!hasReviewed||Boolean(old);
       const desc=old?.description??r.description;
       const gross=old?.gross??r.gross;
-      const rate=old?.tax_rate||"";
+      // Local operating default: all current guest services use 7%.
+      // Existing reviewed snapshots retain their explicitly selected rates.
+      const rate=old?.tax_rate??"7";
       return '<div class="line" data-line="'+r.source_index+'">'+
         '<label><input data-include type="checkbox" '+(included?'checked ':'')+(locked?'disabled':'')+'> Gastpreisposition</label>'+
         '<input data-description type="text" maxlength="160" value="'+e(desc)+'" '+(locked?'disabled':'')+'>'+
         '<div class="money"><input data-gross type="number" step="0.01" min="0.01" value="'+e(gross)+'" '+(locked?'disabled':'')+'>'+
-        ' EUR <select data-rate '+(locked?'disabled':'')+'><option value="">USt prüfen</option>'+
+        ' EUR <select data-rate '+(locked?'disabled':'')+'><option value="" disabled>USt auswählen</option>'+
         ["0","7","19"].map(value=>'<option value="'+value+'" '+(value===rate?'selected':'')+'>'+value+' %</option>').join("")+
         '</select></div></div>';
     }).join("");
