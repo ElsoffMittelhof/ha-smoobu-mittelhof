@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.7.5 — 2026-11-09 (Lexware-L-USt-Vorbelegung und API-Fehlerdiagnose)
+
+- Bei neu geöffneten Buchhaltungsbelegen stehen die Steuersatz-Dropdowns für alle derzeitigen Mittelhof-Gastpositionen auf **7 %** statt auf `USt prüfen`. Manuell andere geprüfte Werte (0/19 %) sowie zuvor gespeicherte Steuerentscheidungen bleiben möglich. Der bestehende ausdrückliche Freigabedialog und die serverseitige Steuer-/Bruttosummenprüfung bleiben erhalten. Die Einstellung ist eine betriebliche Vorbelegung, keine pauschale juristische Anerkennung jeder Sonderleistung.
+- Strukturierte Home-Assistant-API-Fehler (`message`/verschachtelte Fehlerobjekte, HTTP-Status) werden in der Buchhaltungskarte als nachvollziehbarer Text ausgegeben statt `[object Object]`. Bei unerwarteten Fehlern wird zur HA-Protokollprüfung aufgefordert; persönliche Daten/Token werden nicht zusätzlich in die Logs geschrieben.
+- Offline-Verhaltenstest `tests/test_accounting_vat_error_ui.js` für vier voreingestellte 7%-Positionen, Erhalt einer vorhandenen 19%-Prüfung und verständliche API-Fehlertexte; in Validate und Release-CI eingebunden. Keine Änderung an Smoobu-Zahlstatus, manueller Lexware-L-Uploadlogik, Gästeversand, NUKI, Wäsche oder IT.NRW.
+
 ## 0.7.4 — 2026-11-09 (Lexware-L-Buchhaltung: Datumsauswahl)
 
 - Behoben: Datumsfelder **Von/Bis** auf der vierten Gäste-Dashboardseite sprangen bei Klick auf „Buchungen suchen“ auf den vorgegebenen Zeitraum zurück. Ursache: `_run()` renderte die Karte neu, bevor `_refresh()` die aktuell ausgewählten Eingabefelder gelesen hatte.
