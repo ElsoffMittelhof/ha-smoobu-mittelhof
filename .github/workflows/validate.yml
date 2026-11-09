@@ -65,6 +65,8 @@ jobs:
         run: node tests/test_accounting_date_ui.js
       - name: Test accounting VAT defaults and API error rendering
         run: node tests/test_accounting_vat_error_ui.js
+      - name: Test accounting 404 method and path diagnostics
+        run: node tests/test_accounting_404_ui.js
 
   hassfest:
     runs-on: ubuntu-latest
