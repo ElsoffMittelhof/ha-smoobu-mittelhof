@@ -73,7 +73,7 @@ def _created_date(booking):
     arrival date, or last-modified timestamp.
     """
     raw = booking.get("created-at")
-    if not isinstance(raw, str) or not re.match(r"^\\d{4}-\\d{2}-\\d{2}(?:[ T].*)?$", raw):
+    if not isinstance(raw, str) or not re.match(r"^\d{4}-\d{2}-\d{2}(?:[ T].*)?$", raw):
         return None
     value = raw[:10]
     try:
