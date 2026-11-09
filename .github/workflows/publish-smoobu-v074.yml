@@ -40,6 +40,7 @@ jobs:
         run: |
           set -euo pipefail
           for f in custom_components/smoobu_mittelhof/frontend/*.js; do node --check "$f"; done
+          node tests/test_accounting_date_ui.js
 
   hassfest:
     runs-on: ubuntu-latest
