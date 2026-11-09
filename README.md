@@ -2,7 +2,7 @@
 
 Custom Home Assistant integration for Smoobu reservations, booking calendars, laundry approval workflows, NUKI guest-code emails, and optional IT.NRW monthly statistics.
 
-Current public version: **0.7.3**. Existing NUKI/laundry/IT.NRW workflows remain unchanged. The guest center and new Lexware-L accounting PDF exports are opt-in, admin-only; guest messages and invoice issuance remain disabled. Read [the v0.7.2 production and rollback guide](docs/release-0.7.3-production.md) before upgrading.
+Current public version: **0.7.4**. Existing NUKI/laundry/IT.NRW workflows remain unchanged. The guest center and new Lexware-L accounting PDF exports are opt-in, admin-only; guest messages and invoice issuance remain disabled. Read [the v0.7.2 production and rollback guide](docs/release-0.7.4-production.md) before upgrading.
 
 > Technical note: the integration domain remains `smoobu_mittelhof` for compatibility with installations from the private pre-release phase. The public integration contains no property-specific apartment IDs, email addresses, Home Assistant entity IDs, API credentials, or SMTP credentials.
 
@@ -266,3 +266,8 @@ Register exactly one JS module resource `/smoobu_mittelhof/frontend/mittelhof-ac
 ## v0.7.3: Correct guest accounting and booking links
 
 Airbnb platform settlements (`Commission`, `Cancellation Host Fee`, `Cancellation Payout`) are separated from guest-price elements; `PASS_THROUGH_PET_FEE` and `Additional Guest Fee` are included in the guest gross only after amount and tax review. Booking record lines may be excluded or edited by administrators, but the final gross must always equal the Smoobu guest-booking price. For direct/TOMAS bookings the accounting list defaults to **invoice intended** rather than producing an extra booking-income PDF. Existing actually issued invoice numbers can be linked without creating a second revenue entry. Homepage payment method still requires operator choice. The private canonical guests dashboard is `dashboards/gaste-rechnungen.yaml`; all four timeline paths are `/gaste-rechnungen/buchungen`. See [v0.7.3 upgrade instructions](docs/release-0.7.3-production.md).
+
+
+## v0.7.4: Accounting date selector fix
+
+The Lexware L accounting view now reads the selected dates **before** any UI re-render. Both date fields remain selected when searching and when other HA state updates refresh the card; invalid or reversed intervals and windows over 731 days are rejected locally. The implementation includes a Node.js UI behavior regression in the CI and stable release pipeline. See [release notes](docs/release-0.7.4-production.md).
