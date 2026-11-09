@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.7.7 — 2026-11-09 (Reproduzierter HTTP-404 beim Lexware-L-Belegfreigabe-POST)
+
+- **Ursache anhand des echten Browser-Netzwerklogs und GitHub-Code identifiziert:** Die allgemeine Gästenachrichten-POST-Route `/bookings/{booking_id}/{action}` wurde vor dem spezifischen Buchhaltungs-POST `/bookings/{booking_id}/accounting` registriert. Der aiohttp-Router ordnete daher `accounting` irrtümlich als Nachrichtenaktion zu; `GuestMessageActionView.post()` antwortete bei unbekanntem `action` mit `web.HTTPNotFound()`, exakt dem im Browser sichtbaren `404: Not Found`. GET auf denselben Accounting-Pfad war hingegen erreichbar, da der Nachrichten-Handler nur POST anbietet.
+- **Definitive Routenentflechtung:** Nachrichtenaktion-URL in `guest_portal.py` auf `{action:regenerate|approve|send}` begrenzt und die Registrierung der spezifischen Accounting-Views vor die Guest-Views verschoben. Damit kann der Nachrichten-Handler weder die Belegfreigabe noch spätere andere POST-API-Aktionen abfangen. Alle drei erlaubten Nachrichtenaktionen bleiben mit identischer URL erreichbar; tatsächlicher Gastversand weiterhin standardmäßig AUS.
+- Offline-Regressionsvertrag `tests/test_accounting_router_collision.py` prüft das Muster, GET/POST der Buchhaltungs-View, Registrierung und Abgrenzung der Nachrichtenaktionen. Die bestehende JS-/Python-/HACS-/hassfest-Prüfsuite bleibt vollständige Release-Voraussetzung.
+- Keine Änderungen an Buchhaltungspreisen, USt-Prüfung/7%-Vorbelegung, Lexware-Buchung, Gästenachrichten-Logik, Wäsche, NUKI, IT.NRW oder privaten Dashboarddateien. HA-Liveinstallation erfolgt erst nach Backup.
+
 ## 0.7.6 — 2026-11-09 (Lexware-L-Buchhaltung: Belegfreigabe HTTP 404)
 
 - Bereinigt: `_current_source()` lud dieselbe Smoobu-Buchung **zweimal nacheinander**, obwohl `_checked_booking()` den vollständig geprüften Smoobu-Detaildatensatz bereits liefert. Die zusätzliche Netzabfrage entfällt, damit das Lesen und Freigeben eines Buchhaltungsbelegs nicht an unterschiedlichen Antworten zweier unmittelbar aufeinanderfolgender Smoobu-Anfragen scheitert.

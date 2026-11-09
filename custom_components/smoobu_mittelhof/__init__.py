@@ -75,9 +75,11 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
             [StaticPathConfig(FRONTEND_URL, str(FRONTEND_DIR), False)]
         )
     await async_register_services(hass)
+    # Register specific accounting POST routes before guest action handlers.
+    # This prevents the guest action URL from shadowing accounting approval.
+    register_accounting_views(hass)
     register_guest_views(hass)
     register_invoice_service_view(hass)
-    register_accounting_views(hass)
     return True
 
 

@@ -691,7 +691,7 @@ class InvoiceDraftExportView(HomeAssistantView):
 
 
 class GuestMessageActionView(HomeAssistantView):
-    url = "/api/smoobu_mittelhof/guest/v1/bookings/{booking_id}/{action}"
+    url = "/api/smoobu_mittelhof/guest/v1/bookings/{booking_id}/{action:regenerate|approve|send}"
     name = "api:smoobu_mittelhof:guest_message_action"
     requires_auth = True
 
