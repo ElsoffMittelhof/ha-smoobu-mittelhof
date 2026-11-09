@@ -63,6 +63,8 @@ jobs:
         run: node --check custom_components/smoobu_mittelhof/frontend/mittelhof-accounting-card.js
       - name: Test accounting date selection and rerender
         run: node tests/test_accounting_date_ui.js
+      - name: Test accounting VAT defaults and API error rendering
+        run: node tests/test_accounting_vat_error_ui.js
 
   hassfest:
     runs-on: ubuntu-latest
