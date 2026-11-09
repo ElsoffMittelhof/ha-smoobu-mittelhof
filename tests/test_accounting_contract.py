@@ -8,7 +8,7 @@ ROOT=Path(__file__).resolve().parents[1]/"custom_components/smoobu_mittelhof"
 class Contracts(unittest.TestCase):
     def test_manifest_and_disabled_guest_default(self):
         m=json.loads((ROOT/"manifest.json").read_text())
-        self.assertEqual(m["version"],"0.7.5")
+        self.assertEqual(m["version"],"0.7.6")
         const=(ROOT/"const.py").read_text()
         self.assertIn("DEFAULT_GUEST_PORTAL_ENABLED = False",const)
         self.assertIn("DEFAULT_GUEST_MESSAGE_SEND_ENABLED = False",const)
@@ -27,6 +27,20 @@ class Contracts(unittest.TestCase):
         self.assertIn("source_fingerprint",s)
         self.assertIn("confirm_tax_review",s)
         self.assertIn("confirm_manual_upload",s)
+
+    def test_accounting_fetches_booking_only_once_per_request(self):
+        import ast
+        tree=ast.parse((ROOT/"accounting_portal.py").read_text())
+        current=next(node for node in tree.body
+                     if isinstance(node,ast.AsyncFunctionDef) and node.name=="_current_source")
+        fetches=[node for node in ast.walk(current)
+                 if isinstance(node,ast.Call) and
+                 isinstance(node.func,ast.Attribute) and node.func.attr=="get_booking"]
+        self.assertEqual(fetches, [], "No redundant Smoobu request after _checked_booking")
+        checks=[node for node in ast.walk(current)
+                if isinstance(node,ast.Call) and
+                isinstance(node.func,ast.Name) and node.func.id=="_checked_booking"]
+        self.assertEqual(len(checks),1)
 
     def test_no_automatic_guest_mail_or_lexware_write(self):
         s=(ROOT/"accounting_portal.py").read_text()

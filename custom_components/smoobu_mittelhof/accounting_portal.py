@@ -124,17 +124,18 @@ def _accounting_runtime(request):
 
 
 async def _current_source(runtime, booking_id):
+    # _checked_booking already loads the full Smoobu detail (including the
+    # price-elements fallback) and verifies the configured apartment.
+    # A second network fetch could return inconsistent/partial data and was
+    # redundant for both the GET preview and the POST approval operation.
     booking = await _checked_booking(runtime, booking_id)
     try:
-        detail = await runtime.api.get_booking(int(booking_id))
-        # get_booking includes the Smoobu price-elements fallback when available.
-        booking = detail
         apt_id = int((booking.get("apartment") or {}).get("id") or 0)
-        if apt_id not in runtime.houses:
-            raise web.HTTPNotFound(text="Fremde Unterkunft")
         prepared = prepare_booking(booking, runtime.houses[apt_id])
     except (KeyError, ValueError, TypeError) as exc:
-        raise web.HTTPConflict(text=str(exc)) from exc
+        raise web.HTTPConflict(
+            text="Buchung kann nicht für die Buchhaltung geprüft werden: " + str(exc)
+        ) from exc
     return prepared
 
 
