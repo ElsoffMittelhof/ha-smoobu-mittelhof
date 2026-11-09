@@ -1,8 +1,17 @@
 name: Validate
 
+# Run checks for merges and PRs, not for every intermediate push on release branches.
+# Developer branches can still be tested via the Actions "Run workflow" button.
 on:
   push:
+    branches:
+      - main
   pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: validate-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   python-syntax:
