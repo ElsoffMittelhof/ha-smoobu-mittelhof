@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.7.8 — 2026-11-09 (Lexware Office L: Belegdatum und Fälligkeitsdatum)
+
+- Der **interne Buchhaltungsbeleg** enthält nun ausdrücklich das ursprüngliche Smoobu-`created-at`-Buchungsdatum sowie `Belegdatum` und `Fälligkeitsdatum`, beide auf den Kalendertag der ursprünglichen Buchung gesetzt, nicht auf Erstellungs-/PDF-Export- oder Anreisedatum.
+- Die beiden Lexware-Daten werden im Buchhaltungs-Dashboard vor PDF-Freigabe angezeigt und in jeden PDF-Beleg in deutscher Datumsschreibweise `TT.MM.JJJJ` geschrieben. Dies dient der manuellen Einnahmenbeleg-Erfassung in Lexware Office L, erzeugt **keine** zusätzliche Zahlungsaufforderung und sagt nichts über einen tatsächlichen Zahlungseingang oder dessen USt-Zuordnung aus.
+- Smoobu `created-at` muss vollständig vorhanden und kalendergültig sein; bei fehlendem Datum wird **keines erfunden**, sondern die Belegfreigabe gesperrt. Keine Ableitung aus `modifiedAt`, Anreise oder aktuellem Datum.
+- Die PDF-Daten stehen im revisionsgebundenen Buchhaltungs-Snapshot `mittelhof.accounting.v3` und unterliegen dem bestehenden Hash-/Dublettenschutz. Ältere, noch nicht verbuchte PDFs müssen vor einem erneuten Download geprüft werden; bereits als in Lexware hochgeladen markierte Belege werden nicht still geändert oder doppelt erfasst. ZIP-Export und manuelle Lexware-Uploadmarkierung prüfen die Datumsrevision.
+- Zusätzliche Python-/Frontend-Regressionstests für originale Buchungsdaten, beide Lexware-Datumsfelder, PDF-Datumstext und fehlende/ungültige Buchungsdaten. Bestehende Wäsche-, NUKI-, IT.NRW-, Nachrichten- und Rechnungsabläufe bleiben unverändert.
+
 ## 0.7.7 — 2026-11-09 (Reproduzierter HTTP-404 beim Lexware-L-Belegfreigabe-POST)
 
 - **Ursache anhand des echten Browser-Netzwerklogs und GitHub-Code identifiziert:** Die allgemeine Gästenachrichten-POST-Route `/bookings/{booking_id}/{action}` wurde vor dem spezifischen Buchhaltungs-POST `/bookings/{booking_id}/accounting` registriert. Der aiohttp-Router ordnete daher `accounting` irrtümlich als Nachrichtenaktion zu; `GuestMessageActionView.post()` antwortete bei unbekanntem `action` mit `web.HTTPNotFound()`, exakt dem im Browser sichtbaren `404: Not Found`. GET auf denselben Accounting-Pfad war hingegen erreichbar, da der Nachrichten-Handler nur POST anbietet.
