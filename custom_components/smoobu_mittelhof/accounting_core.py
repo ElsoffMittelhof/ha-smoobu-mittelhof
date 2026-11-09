@@ -5,7 +5,7 @@ Pure Python to keep the production integration free from PDF runtime dependencie
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from hashlib import sha256
 import json
@@ -64,6 +64,46 @@ def _default_document_kind(channel):
     # Website bookings are ambiguous: bank transfer vs. card / PayPal.
     # Require a human choice; never assume that "homepage" means invoice.
     return "booking_record"
+
+
+def _created_date(booking):
+    """Smoobu documents 'created-at' as YYYY-MM-DD HH:MM.
+
+    Use the ORIGINAL booking creation date, never today's export date,
+    arrival date, or last-modified timestamp.
+    """
+    raw = booking.get("created-at")
+    if not isinstance(raw, str) or not re.match(r"^\d{4}-\d{2}-\d{2}(?:[ T].*)?$", raw):
+        return None
+    value = raw[:10]
+    try:
+        return date.fromisoformat(value).isoformat()
+    except ValueError:
+        return None
+
+
+def _display_date(value):
+    return date.fromisoformat(value).strftime("%d.%m.%Y")
+
+
+def _require_booking_date(prepared):
+    booked = prepared.get("booking_created_at")
+    if not isinstance(booked, str):
+        raise ValueError("Smoobu-Buchungsdatum 'created-at' fehlt; keine Belegdaten erfinden")
+    try:
+        date.fromisoformat(booked)
+    except ValueError as exc:
+        raise ValueError("Smoobu-Buchungsdatum ungültig; Belegfreigabe gesperrt") from exc
+    return booked
+
+
+def _format_booking_date_lines(snapshot):
+    booked = snapshot["booking_created_at"]
+    return [
+        "Buchungsdatum: " + _display_date(booked),
+        "Belegdatum: " + _display_date(snapshot["document_date"]),
+        "Fälligkeitsdatum: " + _display_date(snapshot["due_date"]),
+    ]
 
 
 def prepare_booking(booking, house):
@@ -130,8 +170,14 @@ def prepare_booking(booking, house):
     if sum((money(r["gross"]) for r in rows), Decimal("0.00")) != total:
         warnings.append("Gastpreispositionen weichen vom Buchungsbrutto ab – vor Export korrigieren")
     channel = channel_name(booking)[:120]
+    booked = _created_date(booking)
+    if not booked:
+        warnings.append("Buchungsdatum (created-at) fehlt oder ist ungültig: Belegfreigabe gesperrt")
     return {
         "booking_id": bid,
+        "booking_created_at": booked,
+        "document_date": booked,
+        "due_date": booked,
         "house": str(house)[:100],
         "guest": str(booking.get("guest-name") or "")[:160],
         "channel": channel,
@@ -180,6 +226,7 @@ def approve_snapshot(prepared, rates, edits=None):
     Deleted/edited rows are allowed only if the reviewed total still exactly
     equals the authoritative booking gross amount.
     """
+    booked = _require_booking_date(prepared)
     rows = _edited_rows(prepared, edits)
     if not isinstance(rates, list) or len(rows) != len(rates):
         raise ValueError("Steuersatz für jede gewählte Position ausdrücklich bestätigen")
@@ -203,7 +250,8 @@ def approve_snapshot(prepared, rates, edits=None):
     if not prepared["arrival"] or not prepared["departure"] or not prepared["house"]:
         raise ValueError("Haus oder Aufenthaltszeitraum fehlen")
     snapshot = {key: prepared[key] for key in (
-        "booking_id", "house", "guest", "channel", "arrival", "departure",
+        "booking_id", "booking_created_at", "document_date", "due_date",
+        "house", "guest", "channel", "arrival", "departure",
         "total_gross", "source_fingerprint"
     )}
     snapshot["rows"] = out
@@ -222,7 +270,7 @@ def approve_snapshot(prepared, rates, edits=None):
     ]
     snapshot["ignored_settlement_lines"] = prepared.get("ignored_settlement_lines", [])
     snapshot["document_kind"] = "internal_booking_record"
-    snapshot["schema"] = "mittelhof.accounting.v2"
+    snapshot["schema"] = "mittelhof.accounting.v3"
     digest = sha256(json.dumps(snapshot, sort_keys=True, ensure_ascii=False,
                                separators=(",", ":")).encode("utf-8")).hexdigest()
     snapshot["sha256"] = digest
@@ -244,6 +292,7 @@ def render_pdf(snapshot):
         "Interner Buchungsnachweis - KEINE Rechnung / Zahlungsaufforderung",
         "",
         "Buchungsreferenz: " + snapshot["booking_id"],
+        *_format_booking_date_lines(snapshot),
         "Unterkunft: " + snapshot["house"],
         "Gast: " + (snapshot["guest"] or "Nicht verfügbar"),
         "Buchungskanal: " + (snapshot["channel"] or "Unbekannt"),

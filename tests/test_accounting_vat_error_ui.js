@@ -32,6 +32,7 @@ card._selected={
   source:{
     booking_id:"98765",guest:"Test Gast",house:"Haus 14",channel:"Airbnb",
     total_gross:"475.00",arrival:"2026-12-22",departure:"2026-12-27",
+    booking_created_at:"2026-11-09", document_date:"2026-11-09", due_date:"2026-11-09",
     rows:[
       {source_index:0,description:"Base Price",gross:"355.00",quantity:1},
       {source_index:1,description:"Cleaning fee",gross:"55.00",quantity:1},
@@ -43,6 +44,8 @@ card._selected={
   record:null,source_changed:false,
 };
 card._render();
+assert.match(html,/Belegdatum:<\/strong> 2026-11-09/);
+assert.match(html,/Fälligkeitsdatum:<\/strong> 2026-11-09/);
 const selects=html.match(/<select data-rate[^>]*>[\s\S]*?<\/select>/g)||[];
 assert.equal(selects.length,4);
 for(const select of selects){

@@ -162,12 +162,19 @@ class AccountingBookingView(HomeAssistantView):
         changed = bool(record and record["source_fingerprint"] != prepared["source_fingerprint"])
         public_record = ({k: v for k, v in record.items() if k != "snapshot"}
                          if record else None)
+        date_revision_required = bool(
+            record and record.get("document_kind") == "booking_record"
+            and (not isinstance(record.get("snapshot"), dict)
+                 or record["snapshot"].get("schema") != "mittelhof.accounting.v3"
+                 or record["snapshot"].get("document_date") != prepared["document_date"])
+        )
         if public_record is not None and isinstance(record.get("snapshot"), dict):
             public_record["reviewed_rows"] = record["snapshot"].get("rows", [])
         return self.json({
             "source": prepared,
             "record": public_record,
             "source_changed": changed,
+            "date_revision_required": date_revision_required,
         })
 
     async def post(self, request, booking_id):
@@ -227,6 +234,12 @@ class AccountingPdfView(HomeAssistantView):
         snapshot = record.get("snapshot")
         if not isinstance(snapshot, dict) or record.get("sha256") != snapshot.get("sha256"):
             raise web.HTTPConflict(text="Belegintegrität nicht verifizierbar")
+        if (snapshot.get("schema") != "mittelhof.accounting.v3"
+                or snapshot.get("document_date") != prepared["document_date"]):
+            raise web.HTTPConflict(
+                text="Ältere Belegrevision ohne geprüfte Lexware-Datumsfelder; "
+                     "bitte Beleg erneut prüfen. Bereits verbuchte Belege nicht überschreiben."
+            )
         payload = await request.app["hass"].async_add_executor_job(render_pdf, snapshot)
         return self.json({
             "filename": "mittelhof-buchhaltungsbeleg-" + booking_id + "-" +
@@ -250,6 +263,10 @@ class AccountingUploadView(HomeAssistantView):
         record = await runtime.accounting.get(booking_id)
         if not record or record["source_fingerprint"] != prepared["source_fingerprint"]:
             raise web.HTTPConflict(text="Beleg wurde nach Freigabe verändert")
+        snapshot = record.get("snapshot")
+        if (not isinstance(snapshot, dict) or snapshot.get("schema") != "mittelhof.accounting.v3"
+                or snapshot.get("document_date") != prepared["document_date"]):
+            raise web.HTTPConflict(text="Lexware-Belegdatum fehlt oder ist veraltet; erneute Prüfung nötig")
         if body.get("confirm_manual_upload") is not True:
             raise web.HTTPConflict(text="Manuellen Upload erst nach erfolgter Lexware-Erfassung bestätigen")
         try:
@@ -291,6 +308,9 @@ class AccountingBundleView(HomeAssistantView):
             snapshot = record.get("snapshot")
             if not isinstance(snapshot, dict) or snapshot.get("sha256") != record.get("sha256"):
                 raise web.HTTPConflict(text="Belegintegrität ungültig: " + bid)
+            if (snapshot.get("schema") != "mittelhof.accounting.v3"
+                    or snapshot.get("document_date") != source["document_date"]):
+                raise web.HTTPConflict(text="Belegdatum noch nicht geprüft: " + bid)
             items.append((bid, snapshot))
         def bundle():
             memory = BytesIO()

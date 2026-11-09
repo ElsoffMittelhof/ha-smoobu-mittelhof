@@ -25,6 +25,7 @@ def sample(price=475):
     return {
         "id": 98765, "type": "reservation",
         "arrival": "2027-08-12", "departure": "2027-08-17",
+        "created-at": "2026-11-09 15:43",
         "guest-name": "Test Gast", "channel": {"name": "Booking.com"},
         "apartment": {"id": 777, "name": "Haus Test"},
         "price": price, "price-paid": True,
@@ -143,6 +144,45 @@ class AccountingTest(unittest.TestCase):
             self.assertEqual(core.prepare_booking(b,"Haus Test")["suggested_document_kind"],"invoice")
         b["channel"]={"name":"Homepage"}
         self.assertEqual(core.prepare_booking(b,"Haus Test")["suggested_document_kind"],"booking_record")
+
+    def test_booking_date_drives_both_lexware_fields(self):
+        source=sample()
+        source["created-at"]="2026-11-09 15:43"
+        prepared=core.prepare_booking(source, "Haus Test")
+        self.assertEqual(prepared["booking_created_at"],"2026-11-09")
+        self.assertEqual(prepared["document_date"],"2026-11-09")
+        self.assertEqual(prepared["due_date"],"2026-11-09")
+        snap=core.approve_snapshot(prepared,["7"]*4)
+        self.assertEqual(snap["schema"],"mittelhof.accounting.v3")
+        self.assertEqual(snap["document_date"],snap["due_date"])
+        self.assertEqual(snap["document_date"],"2026-11-09")
+        pdf=core.render_pdf(snap)
+        self.assertIn(b"Belegdatum: 09.11.2026",pdf)
+        self.assertIn(b"F\xe4lligkeitsdatum: 09.11.2026",pdf)
+        self.assertIn(b"Buchungsdatum: 09.11.2026",pdf)
+
+    def test_missing_invalid_created_date_blocks_instead_of_inventing(self):
+        for raw in (None, "", "2026-02-30 13:05", "yesterday"):
+            source=sample()
+            if raw is None:
+                source.pop("created-at",None)
+            else:
+                source["created-at"]=raw
+            prepared=core.prepare_booking(source,"Haus Test")
+            self.assertIsNone(prepared["booking_created_at"])
+            self.assertTrue(any("Buchungsdatum" in w for w in prepared["warnings"]))
+            with self.assertRaisesRegex(ValueError,"Buchungsdatum"):
+                core.approve_snapshot(prepared,["7"]*4)
+
+    def test_booking_date_never_uses_arrival_modified_or_export_day(self):
+        source=sample()
+        source["created-at"]="2026-12-08T23:55:00+01:00"
+        source["modifiedAt"]="2027-06-01T09:00:00Z"
+        source["arrival"]="2027-08-12"
+        prepared=core.prepare_booking(source,"Haus Test")
+        self.assertEqual(prepared["booking_created_at"],"2026-12-08")
+        snap=core.approve_snapshot(prepared,["7"]*4)
+        self.assertEqual(snap["due_date"],"2026-12-08")
 
     def test_reject_blocked_and_non_cent(self):
         b=sample();b["is-blocked-booking"]=True

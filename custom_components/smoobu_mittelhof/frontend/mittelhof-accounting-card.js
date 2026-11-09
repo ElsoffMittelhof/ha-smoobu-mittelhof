@@ -245,7 +245,11 @@ class MittelhofAccountingCard extends HTMLElement {
     const detail=s?
       '<p><strong>'+e(s.house)+' · '+e(s.guest)+'</strong><br>'+e(s.arrival)+' bis '+e(s.departure)+' · '+e(s.channel)+'</p>'+
       '<p><strong>Gastbrutto: '+e(s.total_gross)+' EUR</strong><small>Zahlungseingang nicht geprüft</small></p>'+
+      '<p><strong>Belegdatum:</strong> '+e(s.document_date||"nicht verfügbar")+
+      ' · <strong>Fälligkeitsdatum:</strong> '+e(s.due_date||"nicht verfügbar")+
+      '<small>Beide aus Smoobu-Buchungsdatum (created-at), für Lexware L. Kein Nachweis einer offenen Forderung.</small></p>'+
       (this._selected.source_changed?'<p class="error">Smoobu-Buchung verändert. Alter Export gesperrt, in Lexware ggf. manuell korrigieren.</p>':'')+
+      (this._selected.date_revision_required?'<p class="warning">Vorherige PDF-Revision enthält noch keine geprüften Buchungs-/Lexware-Datumsfelder. Bitte erneut prüfen; bereits in Lexware hochgeladene Belege nicht überschreiben.</p>':'')+
       kindSelector+
       (invoiceMode?
         '<p class="warning">Direktbuchung/TOMAS/Homepage-Überweisung: keine zweite Buchungs-PDF-Einnahme erfassen. Dieses Modul stellt keine Gastrechnung aus.</p>'+
@@ -259,9 +263,9 @@ class MittelhofAccountingCard extends HTMLElement {
         ' EUR ergeben. Nur Gastleistungen gehören hier hinein.</small></p>'+
         '<div class="actions"><button data-review '+(this._busy||locked||this._selected.source_changed?'disabled':'')+
         '>Steuern prüfen und PDF freigeben</button>'+
-        '<button data-pdf '+(this._busy||!record||record.document_kind==="invoice"||this._selected.source_changed?'disabled':'')+
+        '<button data-pdf '+(this._busy||!record||record.document_kind==="invoice"||this._selected.source_changed||this._selected.date_revision_required?'disabled':'')+
         '>PDF herunterladen</button>'+
-        '<button data-upload '+(this._busy||!record||locked||this._selected.source_changed?'disabled':'')+
+        '<button data-upload '+(this._busy||!record||locked||this._selected.source_changed||this._selected.date_revision_required?'disabled':'')+
         '>In Lexware hochgeladen</button></div>'
       )+
       '<small>Status: '+e(record?.status||(invoiceMode?'Rechnung vorgesehen':'Noch nicht geprüft'))+'</small>':
