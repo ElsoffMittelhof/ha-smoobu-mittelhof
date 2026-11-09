@@ -38,9 +38,10 @@ class MittelhofAccountingCard extends HTMLElement {
     const fromDate=new Date(from+"T00:00:00Z");
     const toDate=new Date(to+"T00:00:00Z");
     const days=(toDate-fromDate)/86400000;
-    if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(from) ||
-        !/^\\d{4}-\\d{2}-\\d{2}$/.test(to) ||
-        !Number.isInteger(days) || days<0 || days>730 ||
+    const datesValid=Number.isFinite(fromDate.getTime()) && Number.isFinite(toDate.getTime());
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(from) ||
+        !/^\d{4}-\d{2}-\d{2}$/.test(to) ||
+        !datesValid || !Number.isInteger(days) || days<0 || days>730 ||
         fromDate.toISOString().slice(0,10)!==from ||
         toDate.toISOString().slice(0,10)!==to) {
       this._error="Bitte einen gültigen Zeitraum von höchstens 731 Tagen wählen (Von ≤ Bis).";
