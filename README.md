@@ -2,7 +2,7 @@
 
 Custom Home Assistant integration for Smoobu reservations, booking calendars, laundry approval workflows, NUKI guest-code emails, and optional IT.NRW monthly statistics.
 
-Current public version: **0.7.4**. Existing NUKI/laundry/IT.NRW workflows remain unchanged. The guest center and new Lexware-L accounting PDF exports are opt-in, admin-only; guest messages and invoice issuance remain disabled. Read [the v0.7.2 production and rollback guide](docs/release-0.7.4-production.md) before upgrading.
+Current public version: **0.7.5**. Existing NUKI/laundry/IT.NRW workflows remain unchanged. The guest center and new Lexware-L accounting PDF exports are opt-in, admin-only; guest messages and invoice issuance remain disabled. Read [the v0.7.2 production and rollback guide](docs/release-0.7.5-production.md) before upgrading.
 
 > Technical note: the integration domain remains `smoobu_mittelhof` for compatibility with installations from the private pre-release phase. The public integration contains no property-specific apartment IDs, email addresses, Home Assistant entity IDs, API credentials, or SMTP credentials.
 
@@ -270,4 +270,9 @@ Airbnb platform settlements (`Commission`, `Cancellation Host Fee`, `Cancellatio
 
 ## v0.7.4: Accounting date selector fix
 
-The Lexware L accounting view now reads the selected dates **before** any UI re-render. Both date fields remain selected when searching and when other HA state updates refresh the card; invalid or reversed intervals and windows over 731 days are rejected locally. The implementation includes a Node.js UI behavior regression in the CI and stable release pipeline. See [release notes](docs/release-0.7.4-production.md).
+The Lexware L accounting view now reads the selected dates **before** any UI re-render. Both date fields remain selected when searching and when other HA state updates refresh the card; invalid or reversed intervals and windows over 731 days are rejected locally. The implementation includes a Node.js UI behavior regression in the CI and stable release pipeline. See [release notes](docs/release-0.7.5-production.md).
+
+
+## v0.7.5: accounting VAT and error diagnostics
+
+On the Lexware Office L accounting dashboard, **7% VAT** is now preselected for newly reviewed guest-price positions (operator-adjustable and subject to explicit approval). Already reviewed different rates remain unchanged. Nested Home Assistant errors display their actual message and HTTP status instead of `[object Object]`. This change does not issue invoices or submit records to Lexware. See [v0.7.5 installation notes](docs/release-0.7.5-production.md).
