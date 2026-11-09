@@ -102,7 +102,7 @@ def _format_booking_date_lines(snapshot):
     return [
         "Buchungsdatum: " + _display_date(booked),
         "Belegdatum: " + _display_date(snapshot["document_date"]),
-        "Faelligkeitsdatum (Lexware-Erfassung): " + _display_date(snapshot["due_date"]),
+        "Fälligkeitsdatum: " + _display_date(snapshot["due_date"]),
     ]
 
 
