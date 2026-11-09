@@ -245,6 +245,9 @@ class MittelhofAccountingCard extends HTMLElement {
     const detail=s?
       '<p><strong>'+e(s.house)+' · '+e(s.guest)+'</strong><br>'+e(s.arrival)+' bis '+e(s.departure)+' · '+e(s.channel)+'</p>'+
       '<p><strong>Gastbrutto: '+e(s.total_gross)+' EUR</strong><small>Zahlungseingang nicht geprüft</small></p>'+
+      '<p><strong>Belegdatum:</strong> '+e(s.document_date||"nicht verfügbar")+
+      ' · <strong>Fälligkeitsdatum:</strong> '+e(s.due_date||"nicht verfügbar")+
+      '<small>Beide aus Smoobu-Buchungsdatum (created-at), für Lexware L. Kein Nachweis einer offenen Forderung.</small></p>'+
       (this._selected.source_changed?'<p class="error">Smoobu-Buchung verändert. Alter Export gesperrt, in Lexware ggf. manuell korrigieren.</p>':'')+
       kindSelector+
       (invoiceMode?
