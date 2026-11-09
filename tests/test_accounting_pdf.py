@@ -158,7 +158,7 @@ class AccountingTest(unittest.TestCase):
         self.assertEqual(snap["document_date"],"2026-11-09")
         pdf=core.render_pdf(snap)
         self.assertIn(b"Belegdatum: 09.11.2026",pdf)
-        self.assertIn(b"Faelligkeitsdatum (Lexware-Erfassung): 09.11.2026",pdf)
+        self.assertIn(b"F\xe4lligkeitsdatum: 09.11.2026",pdf)
         self.assertIn(b"Buchungsdatum: 09.11.2026",pdf)
 
     def test_missing_invalid_created_date_blocks_instead_of_inventing(self):
