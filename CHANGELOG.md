@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.7.6 — 2026-11-09 (Lexware-L-Buchhaltung: Belegfreigabe HTTP 404)
+
+- Bereinigt: `_current_source()` lud dieselbe Smoobu-Buchung **zweimal nacheinander**, obwohl `_checked_booking()` den vollständig geprüften Smoobu-Detaildatensatz bereits liefert. Die zusätzliche Netzabfrage entfällt, damit das Lesen und Freigeben eines Buchhaltungsbelegs nicht an unterschiedlichen Antworten zweier unmittelbar aufeinanderfolgender Smoobu-Anfragen scheitert.
+- Bei HTTP-Fehlern in der Lexware-L-Karte werden nun die betroffene HTTP-Methode, der anonymisierte API-Pfad und die Fehlermeldung angezeigt. Ein HTTP 404 kann aus einem fehlenden Endpunkt **oder** einer Buchungssperre stammen; die Darstellung unterscheidet die Zieloperation, ohne Buchungs-ID oder Gastnamen zu protokollieren.
+- Offline-Regression für nur einen Smoobu-Abruf pro Freigabeversuch und für aussagekräftige, anonymisierte POST-404-Diagnostik; in Validate und Release-CI aufgenommen.
+- **Keine** Änderungen an Buchungspreisen, Steuersätzen, Gastrechnungsfreigaben, Gastnachrichten, Lexware-API, NUKI, Wäsche, IT.NRW oder den vollständigen privaten Dashboards. Ob der gemeldete 404 ausschließlich von der doppelten Smoobu-Abfrage kam, ist ohne Live-HTTP-Trace nicht abschließend nachgewiesen.
+
 ## 0.7.5 — 2026-11-09 (Lexware-L-USt-Vorbelegung und API-Fehlerdiagnose)
 
 - Bei neu geöffneten Buchhaltungsbelegen stehen die Steuersatz-Dropdowns für alle derzeitigen Mittelhof-Gastpositionen auf **7 %** statt auf `USt prüfen`. Manuell andere geprüfte Werte (0/19 %) sowie zuvor gespeicherte Steuerentscheidungen bleiben möglich. Der bestehende ausdrückliche Freigabedialog und die serverseitige Steuer-/Bruttosummenprüfung bleiben erhalten. Die Einstellung ist eine betriebliche Vorbelegung, keine pauschale juristische Anerkennung jeder Sonderleistung.
