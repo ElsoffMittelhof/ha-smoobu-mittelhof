@@ -42,7 +42,25 @@ class MittelhofAccountingCard extends HTMLElement {
     return (prefix+detail).trim()||"Die Anfrage konnte nicht verarbeitet werden. Home-Assistant-Protokoll prüfen.";
   }
   async _api(method, path, data) {
-    return this._hass.callApi(method, "smoobu_mittelhof/guest/v1/"+path, data);
+    const endpoint="smoobu_mittelhof/guest/v1/"+path;
+    try {
+      return await this._hass.callApi(method, endpoint, data);
+    } catch(error) {
+      // HTTP 404 may be a missing HA route OR a booking not found within
+      // the handler. Include the method + endpoint class for diagnosis,
+      // without exposing the booking ID, guest name or authentication data.
+      const endpointClass=endpoint
+        .replace(/\/bookings\/\d+(?=\/|$)/g,"/bookings/{id}")
+        .replace(/\?.*$/,"");
+      const status=error?.status??error?.code;
+      const message=MittelhofAccountingCard.errorText(error);
+      if (status===404 || /(?:^|\s)404(?:\s|$)/.test(message)) {
+        throw new Error("HTTP 404 bei "+method.toUpperCase()+" /api/"+
+          endpointClass+" – Endpunkt oder Smoobu-Buchung nicht gefunden. "+
+          "Home Assistant neu starten und installierte Integrationsversion prüfen.");
+      }
+      throw new Error(method.toUpperCase()+" /api/"+endpointClass+": "+message);
+    }
   }
   async _run(fn) {
     if(this._busy)return;
