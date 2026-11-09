@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.7.4 — 2026-11-09 (Lexware-L-Buchhaltung: Datumsauswahl)
+
+- Behoben: Datumsfelder **Von/Bis** auf der vierten Gäste-Dashboardseite sprangen bei Klick auf „Buchungen suchen“ auf den vorgegebenen Zeitraum zurück. Ursache: `_run()` renderte die Karte neu, bevor `_refresh()` die aktuell ausgewählten Eingabefelder gelesen hatte.
+- Der Suchzeitraum wird nun **vor dem Re-Render** übernommen und bei weiteren UI-Aktionen erhalten. Ungültige Daten, rückwärts gerichtete Zeiträume und Suchfenster größer als 731 Tage werden vor API-Aufrufen abgefangen.
+- Neuer Node-JS-Verhaltensregressionstest für die Datumsselektion und DOM-Re-Render; in CI und Release-Pipeline eingebunden.
+- Ansonsten unveränderte Gästeverwaltung, Lexware-L-PDF-Erstellung, Rechnungsreferenzen, NUKI, Wäsche und IT.NRW. Keine automatische Gastkommunikation, keine Lexware-API und keine echte Rechnungsausstellung.
+
 ## 0.7.3 — 2026-11-08 (Gäste-Buchhaltung: Portalabrechnungen und Rechnungsreferenzen)
 
 - Airbnb-Smoobu-Payload: Settlement-Positionen `Commission`, `Cancellation Host Fee` und `Cancellation Payout` fließen nicht in den Gastbruttobeleg ein. Der separat zu erfassende Provisionsbeleg wird **nicht** künstlich als Gästeumsatz erzeugt. `PASS_THROUGH_PET_FEE` und `Additional Guest Fee` werden als Gastpreispositionen erkannt. Preis-Summe muss nach Trennung exakt dem Smoobu-Buchungsbrutto entsprechen (Regression 355+55+35+30=475, statt falscher 1023,63 EUR).
