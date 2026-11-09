@@ -29,10 +29,26 @@ class MittelhofAccountingCard extends HTMLElement {
     finally {this._busy=false;this._render();}
   }
   async _refresh() {
+    // Read live date inputs BEFORE _run() calls _render(), which replaces them.
+    // Otherwise every search silently restores the previous/default dates.
+    const from=this.shadowRoot.querySelector("[data-from]")?.value ?? this._from;
+    const to=this.shadowRoot.querySelector("[data-to]")?.value ?? this._to;
+    this._from=from;
+    this._to=to;
+    const fromDate=new Date(from+"T00:00:00Z");
+    const toDate=new Date(to+"T00:00:00Z");
+    const days=(toDate-fromDate)/86400000;
+    if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(from) ||
+        !/^\\d{4}-\\d{2}-\\d{2}$/.test(to) ||
+        !Number.isInteger(days) || days<0 || days>730 ||
+        fromDate.toISOString().slice(0,10)!==from ||
+        toDate.toISOString().slice(0,10)!==to) {
+      this._error="Bitte einen gültigen Zeitraum von höchstens 731 Tagen wählen (Von ≤ Bis).";
+      this._render();
+      return;
+    }
     await this._run(async()=>{
-      this._from=this.shadowRoot.querySelector("[data-from]")?.value||this._from;
-      this._to=this.shadowRoot.querySelector("[data-to]")?.value||this._to;
-      const path="search-bookings?from="+encodeURIComponent(this._from)+"&to="+encodeURIComponent(this._to);
+      const path="search-bookings?from="+encodeURIComponent(from)+"&to="+encodeURIComponent(to);
       const [search,ledger]=await Promise.all([this._api("GET",path),this._api("GET","accounting")]);
       this._search=search;
       this._records=ledger.records||[];
@@ -242,6 +258,13 @@ class MittelhofAccountingCard extends HTMLElement {
           </section>
         </div>
       </ha-card>`;
+    // Keep date selection even when HA updates or booking actions re-render the card.
+    this.shadowRoot.querySelector("[data-from]")?.addEventListener("change",event=>{
+      this._from=event.target.value;
+    });
+    this.shadowRoot.querySelector("[data-to]")?.addEventListener("change",event=>{
+      this._to=event.target.value;
+    });
     this.shadowRoot.querySelector("[data-refresh]")?.addEventListener("click",()=>void this._refresh());
     this.shadowRoot.querySelectorAll("[data-booking]").forEach(el=>
       el.addEventListener("click",()=>void this._open(el.dataset.booking)));
