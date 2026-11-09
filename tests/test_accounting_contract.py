@@ -28,6 +28,20 @@ class Contracts(unittest.TestCase):
         self.assertIn("confirm_tax_review",s)
         self.assertIn("confirm_manual_upload",s)
 
+    def test_accounting_fetches_booking_only_once_per_request(self):
+        import ast
+        tree=ast.parse((ROOT/"accounting_portal.py").read_text())
+        current=next(node for node in tree.body
+                     if isinstance(node,ast.AsyncFunctionDef) and node.name=="_current_source")
+        fetches=[node for node in ast.walk(current)
+                 if isinstance(node,ast.Call) and
+                 isinstance(node.func,ast.Attribute) and node.func.attr=="get_booking"]
+        self.assertEqual(fetches, [], "No redundant Smoobu request after _checked_booking")
+        checks=[node for node in ast.walk(current)
+                if isinstance(node,ast.Call) and
+                isinstance(node.func,ast.Name) and node.func.id=="_checked_booking"]
+        self.assertEqual(len(checks),1)
+
     def test_no_automatic_guest_mail_or_lexware_write(self):
         s=(ROOT/"accounting_portal.py").read_text()
         self.assertNotIn("send_message_to_guest(",s)
