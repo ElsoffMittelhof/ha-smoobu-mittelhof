@@ -248,9 +248,9 @@ class MittelhofAccountingCard extends HTMLElement {
       '<p><strong>Gastbrutto: '+e(s.total_gross)+' EUR</strong><small>Zahlungseingang nicht geprüft</small></p>'+
       '<p><strong>Belegdatum:</strong> '+e(s.document_date||"nicht verfügbar")+
       ' · <strong>Fälligkeitsdatum:</strong> '+e(s.due_date||"nicht verfügbar")+
-      '<small>Beide aus Smoobu-Buchungsdatum (created-at), für Lexware L. Kein Nachweis einer offenen Forderung.</small></p>'+
+      '<small>Belegdatum: ursprünglicher Smoobu-Buchungstag. Fälligkeitsdatum: geplantes Zahlungsziel nach Mittelhof-Buchungskanalregel. Tatsächlicher Zahlungseingang nicht geprüft.</small></p>'+
       (this._selected.source_changed?'<p class="error">Smoobu-Buchung verändert. Alter Export gesperrt, in Lexware ggf. manuell korrigieren.</p>':'')+
-      (this._selected.date_revision_required?'<p class="warning">Vorherige PDF-Revision enthält noch keine geprüften Buchungs-/Lexware-Datumsfelder. Bitte erneut prüfen; bereits in Lexware hochgeladene Belege nicht überschreiben.</p>':'')+
+      (this._selected.date_revision_required?'<p class="warning">Vorherige PDF-Revision hat noch kein geprüftes Zahlungsziel nach Kanalregel. Bitte erneut prüfen; bereits in Lexware hochgeladene Belege nicht überschreiben.</p>':'')+
       kindSelector+
       (invoiceMode?
         '<p class="warning">Direktbuchung/TOMAS/Homepage-Überweisung: keine zweite Buchungs-PDF-Einnahme erfassen. Dieses Modul stellt keine Gastrechnung aus.</p>'+
