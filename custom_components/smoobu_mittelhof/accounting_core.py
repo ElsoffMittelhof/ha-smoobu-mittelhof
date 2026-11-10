@@ -176,6 +176,7 @@ def prepare_booking(booking, house):
     return {
         "booking_id": bid,
         "document_number": bid,
+        "accounting_type": "Einnahme",
         "service_date": str(booking.get("departure") or "")[:10],
         "booking_created_at": booked,
         "document_date": booked,
@@ -260,8 +261,10 @@ def approve_snapshot(prepared, rates, edits=None):
         raise ValueError("Checkoutdatum darf nicht vor oder am Anreisetag liegen")
     if prepared["document_number"] != prepared["booking_id"]:
         raise ValueError("Belegnummer stimmt nicht mit der Buchungs-ID überein")
+    if prepared.get("accounting_type") != "Einnahme":
+        raise ValueError("Interner Buchhaltungsbeleg muss als Einnahme gekennzeichnet sein")
     snapshot = {key: prepared[key] for key in (
-        "booking_id", "document_number", "service_date",
+        "booking_id", "document_number", "accounting_type", "service_date",
         "booking_created_at", "document_date", "due_date",
         "house", "guest", "channel", "arrival", "departure",
         "total_gross", "source_fingerprint"
@@ -301,6 +304,7 @@ def render_pdf(snapshot):
     """
     lines = [
         "MITTELHOF - BUCHHALTUNGSBELEG",
+        "Belegtyp: " + snapshot["accounting_type"],
         "Interner Buchungsnachweis - KEINE Rechnung / Zahlungsaufforderung",
         "",
         "Buchungsreferenz: " + snapshot["booking_id"],
