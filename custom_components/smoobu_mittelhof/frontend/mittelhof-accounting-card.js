@@ -244,6 +244,7 @@ class MittelhofAccountingCard extends HTMLElement {
       '<input type="text" maxlength="120" data-invoice-ref placeholder="Rechnungsnummer / Belegreferenz">';
     const detail=s?
       '<p><strong>'+e(s.house)+' · '+e(s.guest)+'</strong><br>'+e(s.arrival)+' bis '+e(s.departure)+' · '+e(s.channel)+'</p>'+
+      '<p><strong>Belegtyp:</strong> '+e(s.accounting_type||"nicht verfügbar")+' · <strong>Belegnummer:</strong> '+e(s.document_number||"nicht verfügbar")+' · <strong>Leistungsdatum:</strong> '+e(s.service_date||"nicht verfügbar")+'</p>'+ 
       '<p><strong>Gastbrutto: '+e(s.total_gross)+' EUR</strong><small>Zahlungseingang nicht geprüft</small></p>'+
       '<p><strong>Belegdatum:</strong> '+e(s.document_date||"nicht verfügbar")+
       ' · <strong>Fälligkeitsdatum:</strong> '+e(s.due_date||"nicht verfügbar")+
