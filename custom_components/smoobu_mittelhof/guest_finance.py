@@ -17,7 +17,7 @@ from .smoobu_sources import guest_invoice_address, source_price_lines
 FINGERPRINT_FIELDS = (
     "id", "arrival", "departure", "channel", "guest-name", "email",
     "price", "price-paid", "prepayment", "prepayment-paid", "deposit",
-    "modifiedAt", "created-at", "price-details", "city-tax", "commission-included",
+    "modifiedAt", "price-details", "city-tax", "commission-included",
     "deposit-paid", "type", "is-blocked-booking",
 )
 PAYMENT_FLOWS = {"unverified", "platform", "guest_invoice", "already_paid"}
@@ -85,7 +85,7 @@ def booking_fingerprint(booking: dict[str, Any]) -> str:
 def source_booking_date(booking: dict[str, Any]) -> str | None:
     """Return Smoobu's ORIGINAL booking date; never substitute modification/today."""
     value = booking.get("created-at")
-    if not isinstance(value, str) or not re.match(r"^\\d{4}-\\d{2}-\\d{2}(?:[ T].*)?$", value):
+    if not isinstance(value, str) or not re.match(r"^\d{4}-\d{2}-\d{2}(?:[ T].*)?$", value):
         return None
     try:
         return date.fromisoformat(value[:10]).isoformat()
