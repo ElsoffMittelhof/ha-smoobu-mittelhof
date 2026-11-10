@@ -165,8 +165,9 @@ class AccountingBookingView(HomeAssistantView):
         date_revision_required = bool(
             record and record.get("document_kind") == "booking_record"
             and (not isinstance(record.get("snapshot"), dict)
-                 or record["snapshot"].get("schema") != "mittelhof.accounting.v4"
+                 or record["snapshot"].get("schema") != "mittelhof.accounting.v5"
                  or record["snapshot"].get("document_date") != prepared["document_date"]
+                 or record["snapshot"].get("due_date") != prepared["due_date"]
                  or record["snapshot"].get("document_number") != prepared["document_number"]
                  or record["snapshot"].get("accounting_type") != prepared["accounting_type"]
                  or record["snapshot"].get("service_date") != prepared["service_date"])
@@ -237,13 +238,14 @@ class AccountingPdfView(HomeAssistantView):
         snapshot = record.get("snapshot")
         if not isinstance(snapshot, dict) or record.get("sha256") != snapshot.get("sha256"):
             raise web.HTTPConflict(text="Belegintegrität nicht verifizierbar")
-        if (snapshot.get("schema") != "mittelhof.accounting.v4"
+        if (snapshot.get("schema") != "mittelhof.accounting.v5"
                 or snapshot.get("document_date") != prepared["document_date"]
+                or snapshot.get("due_date") != prepared["due_date"]
                 or snapshot.get("document_number") != prepared["document_number"]
                 or snapshot.get("accounting_type") != prepared["accounting_type"]
                 or snapshot.get("service_date") != prepared["service_date"]):
             raise web.HTTPConflict(
-                text="Ältere Belegrevision ohne geprüfte Lexware-Belegnummer oder Leistungsdatum; "
+                text="Ältere Belegrevision ohne geprüftes Zahlungsziel nach Kanalregel; "
                      "bitte Beleg erneut prüfen. Bereits verbuchte Belege nicht überschreiben."
             )
         payload = await request.app["hass"].async_add_executor_job(render_pdf, snapshot)
@@ -270,9 +272,9 @@ class AccountingUploadView(HomeAssistantView):
         if not record or record["source_fingerprint"] != prepared["source_fingerprint"]:
             raise web.HTTPConflict(text="Beleg wurde nach Freigabe verändert")
         snapshot = record.get("snapshot")
-        if (not isinstance(snapshot, dict) or snapshot.get("schema") != "mittelhof.accounting.v4"
+        if (not isinstance(snapshot, dict) or snapshot.get("schema") != "mittelhof.accounting.v5"
                 or snapshot.get("document_date") != prepared["document_date"]):
-            raise web.HTTPConflict(text="Lexware-Belegnummer/Leistungsdatum fehlt oder ist veraltet; erneute Prüfung nötig")
+            raise web.HTTPConflict(text="Zahlungsziel oder Belegrevision fehlt oder ist veraltet; erneute Prüfung nötig")
         if body.get("confirm_manual_upload") is not True:
             raise web.HTTPConflict(text="Manuellen Upload erst nach erfolgter Lexware-Erfassung bestätigen")
         try:
@@ -314,12 +316,13 @@ class AccountingBundleView(HomeAssistantView):
             snapshot = record.get("snapshot")
             if not isinstance(snapshot, dict) or snapshot.get("sha256") != record.get("sha256"):
                 raise web.HTTPConflict(text="Belegintegrität ungültig: " + bid)
-            if (snapshot.get("schema") != "mittelhof.accounting.v4"
+            if (snapshot.get("schema") != "mittelhof.accounting.v5"
                     or snapshot.get("document_date") != source["document_date"]
+                    or snapshot.get("due_date") != source["due_date"]
                     or snapshot.get("document_number") != source["document_number"]
                     or snapshot.get("accounting_type") != source["accounting_type"]
                     or snapshot.get("service_date") != source["service_date"]):
-                raise web.HTTPConflict(text="Belegnummer/Leistungsdatum noch nicht geprüft: " + bid)
+                raise web.HTTPConflict(text="Zahlungsziel noch nicht geprüft: " + bid)
             items.append((bid, snapshot))
         def bundle():
             memory = BytesIO()
