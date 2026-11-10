@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.7.9 — 2026-11-10 (Lexware Office L: Einnahme, Belegnummer, Leistungsdatum)
+
+- Interner Buchhaltungsbeleg (PDF) und Admin-Buchhaltungsansicht führen explizit **Belegtyp: Einnahme**; keine Gastrechnung und kein Zahlungsnachweis.
+- **Belegnummer = Smoobu-Buchungs-ID**; diese wird nur aus der validierten Buchungs-ID übernommen und in Beleg-Snapshot und PDF unter eigenem, klar bezeichneten Lexware-Feld ausgewiesen.
+- **Leistungsdatum = Checkoutdatum (`departure`)**; in PDF-Format `TT.MM.JJJJ`, im gespeicherten Snapshot ISO `YYYY-MM-DD`. Fehlendes/ungültiges Checkoutdatum oder Checkout am/vor Anreisetag sperrt die Freigabe; keine Ersatzdaten werden erfunden.
+- Belegdatum und Fälligkeitsdatum bleiben wie seit v0.7.8 der ursprüngliche Buchungstag (`created-at`). Die Ergänzungen ändern **nicht** Zahlungsstatus, tatsächliche USt-Vereinnahmung oder das separate Provisions-/Portalabrechnungsverfahren.
+- Neuer geprüfter Buchhaltungs-Snapshot `mittelhof.accounting.v4`: Einnahme-Markierung, Belegnummer und Leistungsdatum sind revisionsgebunden, mit Hashschutz; ältere bereits freigegebene PDFs benötigen für einen erneuten Einzel-/Sammeldownload eine neue manuelle Prüfung. Bereits als in Lexware hochgeladen markierte Belege bleiben unverändert und müssen bei Korrekturbedarf einzeln abgeglichen werden.
+- Neue Python-/Frontend-Regressionsfälle prüfen die Felder und Ungültigkeitsfälle. Keine Änderungen an Dashboard-YAML, NUKI, Wäsche, IT.NRW, Gastkommunikation, Rechnungsstellung oder direkter Lexware-API.
+
 ## 0.7.8 — 2026-11-09 (Lexware Office L: Belegdatum und Fälligkeitsdatum)
 
 - Der **interne Buchhaltungsbeleg** enthält nun ausdrücklich das ursprüngliche Smoobu-`created-at`-Buchungsdatum sowie `Belegdatum` und `Fälligkeitsdatum`, beide auf den Kalendertag der ursprünglichen Buchung gesetzt, nicht auf Erstellungs-/PDF-Export- oder Anreisedatum.
