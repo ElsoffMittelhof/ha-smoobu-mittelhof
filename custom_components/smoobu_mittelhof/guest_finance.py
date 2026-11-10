@@ -5,10 +5,11 @@ All money is stored as decimal strings to avoid float rounding.
 """
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 import hashlib
 import json
+import re
 from typing import Any
 
 from .smoobu_sources import guest_invoice_address, source_price_lines
@@ -16,7 +17,7 @@ from .smoobu_sources import guest_invoice_address, source_price_lines
 FINGERPRINT_FIELDS = (
     "id", "arrival", "departure", "channel", "guest-name", "email",
     "price", "price-paid", "prepayment", "prepayment-paid", "deposit",
-    "modifiedAt", "price-details", "city-tax", "commission-included",
+    "modifiedAt", "created-at", "price-details", "city-tax", "commission-included",
     "deposit-paid", "type", "is-blocked-booking",
 )
 PAYMENT_FLOWS = {"unverified", "platform", "guest_invoice", "already_paid"}
@@ -79,6 +80,52 @@ def booking_fingerprint(booking: dict[str, Any]) -> str:
     values["channel"] = channel_name(booking)
     encoded = json.dumps(values, sort_keys=True, ensure_ascii=False, default=str).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
+
+
+def source_booking_date(booking: dict[str, Any]) -> str | None:
+    """Return Smoobu's ORIGINAL booking date; never substitute modification/today."""
+    value = booking.get("created-at")
+    if not isinstance(value, str) or not re.match(r"^\\d{4}-\\d{2}-\\d{2}(?:[ T].*)?$", value):
+        return None
+    try:
+        return date.fromisoformat(value[:10]).isoformat()
+    except ValueError:
+        return None
+
+
+def booking_due_date(booking: dict[str, Any]) -> str | None:
+    """Mittelhof operator policy for EXPECTED payment due date, not payment status.
+
+    Airbnb: day after check-in; Booking.com: day after check-out;
+    Naturhäuschen: booking date; TOMAS/direct/homepage:
+    28 days before arrival if booked >=28 days ahead, otherwise booking date.
+    Unknown channels or invalid source dates: no invented fallback.
+    """
+    booked = source_booking_date(booking)
+    if booked is None:
+        return None
+    channel = channel_name(booking).casefold().strip()
+    try:
+        arrival = date.fromisoformat(str(booking.get("arrival") or ""))
+        departure = date.fromisoformat(str(booking.get("departure") or ""))
+    except (TypeError, ValueError):
+        return None
+    if departure <= arrival:
+        return None
+    booked_date = date.fromisoformat(booked)
+    if "airbnb" in channel:
+        due = arrival + timedelta(days=1)
+    elif ("booking.com" in channel or channel in ("booking", "booking com")):
+        due = departure + timedelta(days=1)
+    elif any(value in channel for value in
+             ("naturhäuschen", "naturhaeuschen", "naturhauschen", "nature house")):
+        due = booked_date
+    elif any(value in channel for value in
+             ("tomas", "direkt", "direct", "homepage", "website", "webseite")):
+        due = arrival - timedelta(days=28) if (arrival - booked_date).days >= 28 else booked_date
+    else:
+        return None
+    return due.isoformat()
 
 
 def classify_channel(channel: str) -> str:
@@ -300,6 +347,11 @@ def make_draft(booking: dict[str, Any]) -> dict[str, Any]:
     context = {"guest": guest, "house": house, "arrival": arrival,
                "departure": departure, "language": str(booking.get("language") or "de")}
     lines, source_warnings = source_price_lines(booking)
+    suggested_due = booking_due_date(booking)
+    if suggested_due is None:
+        source_warnings.append(
+            "Zahlungsziel nicht ableitbar: Smoobu-Buchungsdatum, Aufenthalt und Buchungskanal prüfen"
+        )
     addr = booking.get("_guest_invoice_address")
     if not isinstance(addr, dict):
         addr = guest_invoice_address(booking, None)
@@ -337,7 +389,7 @@ def make_draft(booking: dict[str, Any]) -> dict[str, Any]:
             "payment_flow": "unverified",
             "payment_note": "",
             "tax_note": "",
-            "due_date": "",
+            "due_date": suggested_due or "",
             "line_items": lines,
             "logo_asset": "configured_local_logo",
         },
