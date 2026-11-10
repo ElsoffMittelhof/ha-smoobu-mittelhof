@@ -175,6 +175,9 @@ def prepare_booking(booking, house):
         warnings.append("Buchungsdatum (created-at) fehlt oder ist ungültig: Belegfreigabe gesperrt")
     return {
         "booking_id": bid,
+        "document_number": bid,
+        "accounting_type": "Einnahme",
+        "service_date": str(booking.get("departure") or "")[:10],
         "booking_created_at": booked,
         "document_date": booked,
         "due_date": booked,
@@ -249,8 +252,20 @@ def approve_snapshot(prepared, rates, edits=None):
         raise ValueError("Freigegebene Gastpositionen müssen exakt dem Smoobu-Buchungsbrutto entsprechen")
     if not prepared["arrival"] or not prepared["departure"] or not prepared["house"]:
         raise ValueError("Haus oder Aufenthaltszeitraum fehlen")
+    try:
+        arrival = date.fromisoformat(prepared["arrival"])
+        checkout = date.fromisoformat(prepared["service_date"])
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Checkoutdatum fehlt oder ist ungültig; Leistungsdatum kann nicht gebildet werden") from exc
+    if checkout <= arrival:
+        raise ValueError("Checkoutdatum darf nicht vor oder am Anreisetag liegen")
+    if prepared["document_number"] != prepared["booking_id"]:
+        raise ValueError("Belegnummer stimmt nicht mit der Buchungs-ID überein")
+    if prepared.get("accounting_type") != "Einnahme":
+        raise ValueError("Interner Buchhaltungsbeleg muss als Einnahme gekennzeichnet sein")
     snapshot = {key: prepared[key] for key in (
-        "booking_id", "booking_created_at", "document_date", "due_date",
+        "booking_id", "document_number", "accounting_type", "service_date",
+        "booking_created_at", "document_date", "due_date",
         "house", "guest", "channel", "arrival", "departure",
         "total_gross", "source_fingerprint"
     )}
@@ -270,7 +285,7 @@ def approve_snapshot(prepared, rates, edits=None):
     ]
     snapshot["ignored_settlement_lines"] = prepared.get("ignored_settlement_lines", [])
     snapshot["document_kind"] = "internal_booking_record"
-    snapshot["schema"] = "mittelhof.accounting.v3"
+    snapshot["schema"] = "mittelhof.accounting.v4"
     digest = sha256(json.dumps(snapshot, sort_keys=True, ensure_ascii=False,
                                separators=(",", ":")).encode("utf-8")).hexdigest()
     snapshot["sha256"] = digest
@@ -289,10 +304,13 @@ def render_pdf(snapshot):
     """
     lines = [
         "MITTELHOF - BUCHHALTUNGSBELEG",
+        "Belegtyp: " + snapshot["accounting_type"],
         "Interner Buchungsnachweis - KEINE Rechnung / Zahlungsaufforderung",
         "",
         "Buchungsreferenz: " + snapshot["booking_id"],
+        "Belegnummer: " + snapshot["document_number"],
         *_format_booking_date_lines(snapshot),
+        "Leistungsdatum: " + _display_date(snapshot["service_date"]),
         "Unterkunft: " + snapshot["house"],
         "Gast: " + (snapshot["guest"] or "Nicht verfügbar"),
         "Buchungskanal: " + (snapshot["channel"] or "Unbekannt"),

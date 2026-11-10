@@ -153,13 +153,39 @@ class AccountingTest(unittest.TestCase):
         self.assertEqual(prepared["document_date"],"2026-11-09")
         self.assertEqual(prepared["due_date"],"2026-11-09")
         snap=core.approve_snapshot(prepared,["7"]*4)
-        self.assertEqual(snap["schema"],"mittelhof.accounting.v3")
+        self.assertEqual(snap["schema"],"mittelhof.accounting.v4")
         self.assertEqual(snap["document_date"],snap["due_date"])
         self.assertEqual(snap["document_date"],"2026-11-09")
         pdf=core.render_pdf(snap)
         self.assertIn(b"Belegdatum: 09.11.2026",pdf)
         self.assertIn(b"F\xe4lligkeitsdatum: 09.11.2026",pdf)
         self.assertIn(b"Buchungsdatum: 09.11.2026",pdf)
+
+    def test_lexware_income_document_number_and_checkout_date(self):
+        source=sample()
+        source["id"]=160317906
+        source["departure"]="2027-08-17"
+        p=core.prepare_booking(source,"Haus Test")
+        self.assertEqual(p["accounting_type"],"Einnahme")
+        self.assertEqual(p["document_number"],"160317906")
+        self.assertEqual(p["service_date"],"2027-08-17")
+        snap=core.approve_snapshot(p,["7"]*4)
+        self.assertEqual(snap["schema"],"mittelhof.accounting.v4")
+        self.assertEqual(snap["accounting_type"],"Einnahme")
+        self.assertEqual(snap["document_number"],snap["booking_id"])
+        pdf=core.render_pdf(snap)
+        for expected in (b"Belegtyp: Einnahme", b"Belegnummer: 160317906",
+                         b"Leistungsdatum: 17.08.2027", b"Belegdatum: 09.11.2026",
+                         b"F\xe4lligkeitsdatum: 09.11.2026"):
+            self.assertIn(expected,pdf)
+
+    def test_invalid_checkout_blocks_export(self):
+        for bad in ("", "2027-08-12", "2027-02-30", "2027-08-11"):
+            booking=sample()
+            booking["departure"]=bad
+            prepared=core.prepare_booking(booking,"Haus Test")
+            with self.assertRaises(ValueError):
+                core.approve_snapshot(prepared,["7"]*4)
 
     def test_missing_invalid_created_date_blocks_instead_of_inventing(self):
         for raw in (None, "", "2026-02-30 13:05", "yesterday"):
