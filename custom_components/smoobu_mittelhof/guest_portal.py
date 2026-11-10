@@ -208,8 +208,9 @@ class GuestDraftRepository:
                     str(Decimal(str(booking.get("price"))).quantize(__import__("decimal").Decimal("0.01")))):
                 return
             fresh = make_draft(booking)
-            if fresh["invoice"]["line_items"] == current["invoice"]["line_items"] and (
-                    fresh["invoice"].get("recipient_country") == current["invoice"].get("recipient_country")):
+            if (fresh["invoice"]["line_items"] == current["invoice"]["line_items"]
+                    and fresh["invoice"].get("recipient_country") == current["invoice"].get("recipient_country")
+                    and fresh["invoice"].get("due_date") == current["invoice"].get("due_date")):
                 return
             # Preserve audit origin; all invoice fields were untouched until now.
             fresh["created_at"] = current["created_at"]
