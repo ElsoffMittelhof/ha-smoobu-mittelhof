@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.7.10 — 2026-11-10 (Fälligkeitsdatum nach Buchungskanal für Belege und Rechnungen)
+
+- **Einheitlicher Zahlungstermin** im Buchhaltungs-PDF und im Rechnungsentwurf: Airbnb = Anreise + 1 Tag; Booking.com = Abreise + 1 Tag; Naturhäuschen = ursprünglicher Buchungstag; TOMAS/Direkt/Homepage = 28 Tage vor Anreise bei mindestens 28 Tagen Buchungsvorlauf, sonst ursprünglicher Buchungstag.
+- Zentrale, pure Funktion `guest_finance.booking_due_date()` mit kontrollierten Smoobu-Datumswerten; unbekannte Kanäle und unplausible Daten erzeugen keine fiktive Fälligkeit. Für Airbnb und Booking.com reicht die Aufenthaltszeit (kein Buchungsdatum für die Fälligkeitsberechnung erforderlich).
+- `make_draft()` setzt das Rechnungs-Zahlungsziel automatisch; bei späterem Smoobu-Detailabruf können nur unberührte Entwürfe ergänzt werden. Ein manuell bearbeitetes Zahlungsziel bleibt ausdrücklich editierbar. Private ZUGFeRD-Muster erhalten `invoice.due_date` über das bestehende exportierte Rechnungs-Datenmodell, stellen jedoch keine echten Rechnungen aus.
+- Das interne Lexware-L-PDF nutzt die gleiche Regel, `Belegdatum` bleibt der originale Buchungstag, `Leistungsdatum` der Checkout. Neuer freigegebener Snapshot `mittelhof.accounting.v5` mit prüfbarer Fälligkeit. Buchungsbrutto, 7%-Steuerkontrolle, doppelte Einnahmenvermeidung und Gastversandverbote bleiben unverändert.
+- Betreiber bestätigt: noch keine produktiv erstellten Belege/Rechnungen; keine historische Datenmigration erforderlich. Keine Änderungen am einzigen Home Assistant, den privaten Dashboards oder bestehenden NUKI-/Wäsche-/IT.NRW-Prozessen. Vollständige neue stabile Produktivversion statt fortgeschriebener RC.
+
 ## 0.7.9 — 2026-11-10 (Lexware Office L: Einnahme, Belegnummer, Leistungsdatum)
 
 - Interner Buchhaltungsbeleg (PDF) und Admin-Buchhaltungsansicht führen explizit **Belegtyp: Einnahme**; keine Gastrechnung und kein Zahlungsnachweis.
