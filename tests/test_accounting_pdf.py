@@ -176,7 +176,7 @@ class AccountingTest(unittest.TestCase):
         pdf=core.render_pdf(snap)
         for expected in (b"Belegtyp: Einnahme", b"Belegnummer: 160317906",
                          b"Leistungsdatum: 17.08.2027", b"Belegdatum: 09.11.2026",
-                         b"F\\xe4lligkeitsdatum: 09.11.2026"):
+                         b"F\xe4lligkeitsdatum: 09.11.2026"):
             self.assertIn(expected,pdf)
 
     def test_invalid_checkout_blocks_export(self):
