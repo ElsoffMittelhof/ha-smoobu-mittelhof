@@ -102,8 +102,6 @@ def booking_due_date(booking: dict[str, Any]) -> str | None:
     Unknown channels or invalid source dates: no invented fallback.
     """
     booked = source_booking_date(booking)
-    if booked is None:
-        return None
     channel = channel_name(booking).casefold().strip()
     try:
         arrival = date.fromisoformat(str(booking.get("arrival") or ""))
@@ -112,16 +110,20 @@ def booking_due_date(booking: dict[str, Any]) -> str | None:
         return None
     if departure <= arrival:
         return None
-    booked_date = date.fromisoformat(booked)
     if "airbnb" in channel:
         due = arrival + timedelta(days=1)
     elif ("booking.com" in channel or channel in ("booking", "booking com")):
         due = departure + timedelta(days=1)
     elif any(value in channel for value in
              ("naturhäuschen", "naturhaeuschen", "naturhauschen", "nature house")):
-        due = booked_date
+        if booked is None:
+            return None
+        due = date.fromisoformat(booked)
     elif any(value in channel for value in
              ("tomas", "direkt", "direct", "homepage", "website", "webseite")):
+        if booked is None:
+            return None
+        booked_date = date.fromisoformat(booked)
         due = arrival - timedelta(days=28) if (arrival - booked_date).days >= 28 else booked_date
     else:
         return None
