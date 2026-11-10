@@ -2,7 +2,7 @@
 
 Custom Home Assistant integration for Smoobu reservations, booking calendars, laundry approval workflows, NUKI guest-code emails, and optional IT.NRW monthly statistics.
 
-Current public version: **0.7.9**. Existing NUKI/laundry/IT.NRW workflows remain unchanged. The guest center and new Lexware-L accounting PDF exports are opt-in, admin-only; guest messages and invoice issuance remain disabled. Read [the v0.7.2 production and rollback guide](docs/release-0.7.9-production.md) before upgrading.
+Current public version: **0.7.10**. Existing NUKI/laundry/IT.NRW workflows remain unchanged. The guest center and new Lexware-L accounting PDF exports are opt-in, admin-only; guest messages and invoice issuance remain disabled. Read [the v0.7.2 production and rollback guide](docs/release-0.7.10-production.md) before upgrading.
 
 > Technical note: the integration domain remains `smoobu_mittelhof` for compatibility with installations from the private pre-release phase. The public integration contains no property-specific apartment IDs, email addresses, Home Assistant entity IDs, API credentials, or SMTP credentials.
 
@@ -270,29 +270,34 @@ Airbnb platform settlements (`Commission`, `Cancellation Host Fee`, `Cancellatio
 
 ## v0.7.4: Accounting date selector fix
 
-The Lexware L accounting view now reads the selected dates **before** any UI re-render. Both date fields remain selected when searching and when other HA state updates refresh the card; invalid or reversed intervals and windows over 731 days are rejected locally. The implementation includes a Node.js UI behavior regression in the CI and stable release pipeline. See [release notes](docs/release-0.7.9-production.md).
+The Lexware L accounting view now reads the selected dates **before** any UI re-render. Both date fields remain selected when searching and when other HA state updates refresh the card; invalid or reversed intervals and windows over 731 days are rejected locally. The implementation includes a Node.js UI behavior regression in the CI and stable release pipeline. See [release notes](docs/release-0.7.10-production.md).
 
 
 ## v0.7.5: accounting VAT and error diagnostics
 
-On the Lexware Office L accounting dashboard, **7% VAT** is now preselected for newly reviewed guest-price positions (operator-adjustable and subject to explicit approval). Already reviewed different rates remain unchanged. Nested Home Assistant errors display their actual message and HTTP status instead of `[object Object]`. This change does not issue invoices or submit records to Lexware. See [v0.7.5 installation notes](docs/release-0.7.9-production.md).
+On the Lexware Office L accounting dashboard, **7% VAT** is now preselected for newly reviewed guest-price positions (operator-adjustable and subject to explicit approval). Already reviewed different rates remain unchanged. Nested Home Assistant errors display their actual message and HTTP status instead of `[object Object]`. This change does not issue invoices or submit records to Lexware. See [v0.7.5 installation notes](docs/release-0.7.10-production.md).
 
 
 ## v0.7.6: 404 diagnosis and one Smoobu detail fetch
 
-The accounting approval route now reuses the already validated booking instead of fetching the same Smoobu details twice. A failing request shows its anonymized HTTP method/route for diagnosis. This improves reliability but a 404 could still originate from an unregistered endpoint or an out-of-scope booking; inspect the indicated operation and backend logs before making further changes. See [v0.7.6 release instructions](docs/release-0.7.9-production.md).
+The accounting approval route now reuses the already validated booking instead of fetching the same Smoobu details twice. A failing request shows its anonymized HTTP method/route for diagnosis. This improves reliability but a 404 could still originate from an unregistered endpoint or an out-of-scope booking; inspect the indicated operation and backend logs before making further changes. See [v0.7.6 release instructions](docs/release-0.7.10-production.md).
 
 
 ## v0.7.7: Accounting POST route no longer shadowed
 
-The HTTP 404 on accounting approval was caused by the earlier catch-all guest message POST route interpreting `/bookings/{id}/accounting` as an unsupported message action. In v0.7.7 message routes are strictly limited to `regenerate`, `approve` and `send`, and specific accounting handlers register first. The existing admin-only accounting checks, 7% VAT defaults and disabled guest messaging are preserved. See [v0.7.7 release notes](docs/release-0.7.9-production.md).
+The HTTP 404 on accounting approval was caused by the earlier catch-all guest message POST route interpreting `/bookings/{id}/accounting` as an unsupported message action. In v0.7.7 message routes are strictly limited to `regenerate`, `approve` and `send`, and specific accounting handlers register first. The existing admin-only accounting checks, 7% VAT defaults and disabled guest messaging are preserved. See [v0.7.7 release notes](docs/release-0.7.10-production.md).
 
 
 ## v0.7.8: Booking date, document date and due date for Lexware L
 
-Accounting PDFs now print the original Smoobu reservation `created-at` date, **Belegdatum** and **Fälligkeitsdatum**, both set to the date of booking. The admin accounting screen shows the same values. Missing/invalid source dates block approval rather than creating fictitious dates. This does not represent a payment due from a guest, and Lexware remains responsible for bank reconciliation and tax posting. Previously approved PDFs lacking these fields must be reviewed again before further export. See [v0.7.8 instructions](docs/release-0.7.9-production.md).
+Accounting PDFs now print the original Smoobu reservation `created-at` date, **Belegdatum** and **Fälligkeitsdatum**, both set to the date of booking. The admin accounting screen shows the same values. Missing/invalid source dates block approval rather than creating fictitious dates. This does not represent a payment due from a guest, and Lexware remains responsible for bank reconciliation and tax posting. Previously approved PDFs lacking these fields must be reviewed again before further export. See [v0.7.8 instructions](docs/release-0.7.10-production.md).
 
 
 ## v0.7.9: Lexware Office L – Einnahme, Belegnummer, Leistungsdatum
 
-The internal accounting PDF explicitly states **Belegtyp: Einnahme**, **Belegnummer = Smoobu booking ID** and **Leistungsdatum = checkout (`departure`)**, while Belegdatum and Fälligkeitsdatum remain the original Smoobu `created-at` date. All fields are reviewed and versioned in accounting snapshot v4; older reviewed PDF revisions require a fresh check before export. The PDF still isn't a guest invoice or proof of payment, and the manual Lexware L upload procedure remains unchanged. See [release v0.7.9](docs/release-0.7.9-production.md).
+The internal accounting PDF explicitly states **Belegtyp: Einnahme**, **Belegnummer = Smoobu booking ID** and **Leistungsdatum = checkout (`departure`)**, while Belegdatum and Fälligkeitsdatum remain the original Smoobu `created-at` date. All fields are reviewed and versioned in accounting snapshot v4; older reviewed PDF revisions require a fresh check before export. The PDF still isn't a guest invoice or proof of payment, and the manual Lexware L upload procedure remains unchanged. See [release v0.7.9](docs/release-0.7.10-production.md).
+
+
+## v0.7.10: Channel-based payment due dates for accounting and invoice drafts
+
+Mittelhof due-date rule: Airbnb check-in + 1 day; Booking.com check-out + 1 day; Naturhäuschen original booking date; TOMAS/direct/homepage booking at least 28 days before arrival -> arrival minus 28 days, otherwise original booking date. This shared rule preselects the due date for both internal accounting receipts and the separate DEMO invoice draft pathway. It never establishes payment receipt or enables guest invoice issuance. [Installation and regression notes](docs/release-0.7.10-production.md).

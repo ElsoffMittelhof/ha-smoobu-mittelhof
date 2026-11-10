@@ -25,6 +25,7 @@ def booking(channel="Airbnb", paid="Yes", price=420):
     return {
         "id": 12345, "type": "reservation",
         "arrival": "2027-01-10", "departure": "2027-01-14",
+        "created-at": "2026-12-01 11:22",
         "apartment": {"id": 123, "name": "Ferienwohnung"},
         "guest-name": "Test Gast", "email": "test@example.invalid",
         "price": price, "price-paid": paid,
@@ -33,6 +34,62 @@ def booking(channel="Airbnb", paid="Yes", price=420):
 
 
 class TestGuestDrafts(unittest.TestCase):
+    def test_payment_due_policy_is_shared_with_invoice_draft(self):
+        values={
+            "Airbnb":"2027-01-11",
+            "Booking.com":"2027-01-15",
+            "Naturhäuschen":"2026-12-01",
+            "Naturhaeuschen":"2026-12-01",
+            "TOMAS":"2026-12-13",
+            "Direktbuchung":"2026-12-13",
+            "Homepage":"2026-12-13",
+            "Website":"2026-12-13",
+        }
+        for channel, expected in values.items():
+            with self.subTest(channel=channel):
+                source=booking(channel)
+                self.assertEqual(mod.booking_due_date(source),expected)
+                draft=mod.make_draft(source)
+                self.assertEqual(draft["invoice"]["due_date"],expected)
+                self.assertFalse(draft["invoice"]["payment_verified"])
+                self.assertEqual(draft["invoice"]["payment_flow"],"unverified")
+
+    def test_direct_payment_due_exact_28_day_cutoff(self):
+        for channel in ("TOMAS","Direkt","Homepage"):
+            for created, expected in (
+                ("2026-12-12 14:00","2026-12-13"),  # 29 days before
+                ("2026-12-13 14:00","2026-12-13"),  # exactly 28 days
+                ("2026-12-14 14:00","2026-12-14"),  # 27 days before
+                ("2027-01-09 14:00","2027-01-09"),  # one day before
+            ):
+                source=booking(channel)
+                source["created-at"]=created
+                with self.subTest(channel=channel,created=created):
+                    self.assertEqual(mod.booking_due_date(source),expected)
+
+    def test_payment_due_uses_real_calendar_and_fails_closed(self):
+        source=booking("Booking.com")
+        source["departure"]="2028-02-29"
+        self.assertEqual(mod.booking_due_date(source),"2028-03-01")
+        # OTA due dates come from check-in/out even if list rows omit 'created-at'.
+        for channel, expected in (("Airbnb","2027-01-11"),("Booking.com","2027-01-15")):
+            ota=booking(channel)
+            ota.pop("created-at")
+            self.assertEqual(mod.booking_due_date(ota), expected)
+            self.assertEqual(mod.make_draft(ota)["invoice"]["due_date"], expected)
+        for change in (
+            {"created-at":""},
+            {"created-at":"2026-02-30 12:00"},
+            {"channel":{"name":"Unbekannt"}},
+            {"arrival":"2027-02-30"},
+            {"departure":"2027-01-10"},
+        ):
+            value=booking('Direkt')
+            value.update(change)
+            with self.subTest(change=change):
+                self.assertIsNone(mod.booking_due_date(value))
+                self.assertEqual(mod.make_draft(value)["invoice"]["due_date"],"")
+
     def test_channel_never_means_paid(self):
         for channel in ("Airbnb", "Booking.com", "Naturhäuschen", "TOMAS", "Direkt"):
             d = mod.make_draft(booking(channel))

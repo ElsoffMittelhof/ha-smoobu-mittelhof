@@ -178,6 +178,13 @@ class GuestDraftRepository:
                     existing["source_channel"] = refreshed["source_channel"]
                     existing["source_channel_class"] = refreshed["source_channel_class"]
                     existing["booking_context"] = refreshed["booking_context"]
+                    # A changed arrival/channel alters the computed payment date.
+                    # Refresh only untouched/empty due dates; never override
+                    # an operator's explicitly edited invoice due date.
+                    if (not any(event.get("event") == "edited"
+                                for event in existing.get("audit", []))
+                            or not existing["invoice"].get("due_date")):
+                        existing["invoice"]["due_date"] = refreshed["invoice"]["due_date"]
                     existing["source_change_pending"] = False
                     existing["invoice_review"] = {
                         "state": "draft", "requested_revision": None, "requested_at": None
@@ -208,8 +215,9 @@ class GuestDraftRepository:
                     str(Decimal(str(booking.get("price"))).quantize(__import__("decimal").Decimal("0.01")))):
                 return
             fresh = make_draft(booking)
-            if fresh["invoice"]["line_items"] == current["invoice"]["line_items"] and (
-                    fresh["invoice"].get("recipient_country") == current["invoice"].get("recipient_country")):
+            if (fresh["invoice"]["line_items"] == current["invoice"]["line_items"]
+                    and fresh["invoice"].get("recipient_country") == current["invoice"].get("recipient_country")
+                    and fresh["invoice"].get("due_date") == current["invoice"].get("due_date")):
                 return
             # Preserve audit origin; all invoice fields were untouched until now.
             fresh["created_at"] = current["created_at"]

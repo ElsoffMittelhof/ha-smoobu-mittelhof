@@ -145,20 +145,20 @@ class AccountingTest(unittest.TestCase):
         b["channel"]={"name":"Homepage"}
         self.assertEqual(core.prepare_booking(b,"Haus Test")["suggested_document_kind"],"booking_record")
 
-    def test_booking_date_drives_both_lexware_fields(self):
+    def test_booking_date_and_payment_due_are_separate_lexware_fields(self):
         source=sample()
         source["created-at"]="2026-11-09 15:43"
         prepared=core.prepare_booking(source, "Haus Test")
         self.assertEqual(prepared["booking_created_at"],"2026-11-09")
         self.assertEqual(prepared["document_date"],"2026-11-09")
-        self.assertEqual(prepared["due_date"],"2026-11-09")
+        self.assertEqual(prepared["due_date"],"2027-08-18")
         snap=core.approve_snapshot(prepared,["7"]*4)
-        self.assertEqual(snap["schema"],"mittelhof.accounting.v4")
-        self.assertEqual(snap["document_date"],snap["due_date"])
+        self.assertEqual(snap["schema"],"mittelhof.accounting.v5")
+        self.assertNotEqual(snap["document_date"],snap["due_date"])
         self.assertEqual(snap["document_date"],"2026-11-09")
         pdf=core.render_pdf(snap)
         self.assertIn(b"Belegdatum: 09.11.2026",pdf)
-        self.assertIn(b"F\xe4lligkeitsdatum: 09.11.2026",pdf)
+        self.assertIn(b"F\xe4lligkeitsdatum: 18.08.2027",pdf)
         self.assertIn(b"Buchungsdatum: 09.11.2026",pdf)
 
     def test_lexware_income_document_number_and_checkout_date(self):
@@ -170,14 +170,43 @@ class AccountingTest(unittest.TestCase):
         self.assertEqual(p["document_number"],"160317906")
         self.assertEqual(p["service_date"],"2027-08-17")
         snap=core.approve_snapshot(p,["7"]*4)
-        self.assertEqual(snap["schema"],"mittelhof.accounting.v4")
+        self.assertEqual(snap["schema"],"mittelhof.accounting.v5")
         self.assertEqual(snap["accounting_type"],"Einnahme")
         self.assertEqual(snap["document_number"],snap["booking_id"])
         pdf=core.render_pdf(snap)
         for expected in (b"Belegtyp: Einnahme", b"Belegnummer: 160317906",
                          b"Leistungsdatum: 17.08.2027", b"Belegdatum: 09.11.2026",
-                         b"F\xe4lligkeitsdatum: 09.11.2026"):
+                         b"F\xe4lligkeitsdatum: 18.08.2027"):
             self.assertIn(expected,pdf)
+
+    def test_accounting_pdf_due_date_per_channel(self):
+        examples={
+            "Airbnb":"2027-08-13",
+            "Booking.com":"2027-08-18",
+            "Naturhäuschen":"2026-11-09",
+            "TOMAS":"2027-07-15",
+            "Direktbuchung":"2027-07-15",
+            "Homepage":"2027-07-15",
+        }
+        for channel, due in examples.items():
+            b=sample()
+            b["channel"]={"name":channel}
+            prepared=core.prepare_booking(b,"Haus Test")
+            self.assertEqual(prepared["due_date"],due)
+            snapshot=core.approve_snapshot(prepared,["7"]*4)
+            self.assertEqual(snapshot["due_date"],due)
+            self.assertEqual(snapshot["document_date"],"2026-11-09")
+            expected=("Fälligkeitsdatum: "+due[8:10]+"."+due[5:7]+"."+due[:4]).encode("cp1252")
+            self.assertIn(expected,core.render_pdf(snapshot))
+
+    def test_unrecognized_channel_cannot_approve_unverified_due_date(self):
+        b=sample()
+        b["channel"]={"name":"Sonstiger Buchungskanal"}
+        prepared=core.prepare_booking(b,"Haus Test")
+        self.assertIsNone(prepared["due_date"])
+        self.assertTrue(any("Zahlungsziel" in w for w in prepared["warnings"]))
+        with self.assertRaisesRegex(ValueError,"Zahlungsziel"):
+            core.approve_snapshot(prepared,["7"]*4)
 
     def test_invalid_checkout_blocks_export(self):
         for bad in ("", "2027-08-12", "2027-02-30", "2027-08-11"):
@@ -208,7 +237,7 @@ class AccountingTest(unittest.TestCase):
         prepared=core.prepare_booking(source,"Haus Test")
         self.assertEqual(prepared["booking_created_at"],"2026-12-08")
         snap=core.approve_snapshot(prepared,["7"]*4)
-        self.assertEqual(snap["due_date"],"2026-12-08")
+        self.assertEqual(snap["due_date"],"2027-08-18")
 
     def test_reject_blocked_and_non_cent(self):
         b=sample();b["is-blocked-booking"]=True

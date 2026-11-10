@@ -12,7 +12,7 @@ import json
 import re
 import textwrap
 
-from .guest_finance import booking_fingerprint, channel_name
+from .guest_finance import booking_fingerprint, channel_name, booking_due_date, source_booking_date
 from .smoobu_sources import source_price_lines
 
 ALLOWED_RATES = {"0", "7", "19"}
@@ -170,7 +170,13 @@ def prepare_booking(booking, house):
     if sum((money(r["gross"]) for r in rows), Decimal("0.00")) != total:
         warnings.append("Gastpreispositionen weichen vom Buchungsbrutto ab – vor Export korrigieren")
     channel = channel_name(booking)[:120]
-    booked = _created_date(booking)
+    booked = source_booking_date(booking)
+    due = booking_due_date(booking)
+    if not due:
+        warnings.append(
+            "Zahlungsziel nicht ableitbar: Buchungskanal, ursprüngliches Buchungsdatum "
+            "und An-/Abreisetage prüfen; Belegfreigabe gesperrt"
+        )
     if not booked:
         warnings.append("Buchungsdatum (created-at) fehlt oder ist ungültig: Belegfreigabe gesperrt")
     return {
@@ -180,7 +186,7 @@ def prepare_booking(booking, house):
         "service_date": str(booking.get("departure") or "")[:10],
         "booking_created_at": booked,
         "document_date": booked,
-        "due_date": booked,
+        "due_date": due,
         "house": str(house)[:100],
         "guest": str(booking.get("guest-name") or "")[:160],
         "channel": channel,
@@ -230,6 +236,10 @@ def approve_snapshot(prepared, rates, edits=None):
     equals the authoritative booking gross amount.
     """
     booked = _require_booking_date(prepared)
+    try:
+        date.fromisoformat(prepared["due_date"])
+    except (ValueError, TypeError, KeyError) as exc:
+        raise ValueError("Zahlungsziel nach Mittelhof-Kanalregel fehlt oder ist ungültig") from exc
     rows = _edited_rows(prepared, edits)
     if not isinstance(rates, list) or len(rows) != len(rates):
         raise ValueError("Steuersatz für jede gewählte Position ausdrücklich bestätigen")
@@ -285,7 +295,7 @@ def approve_snapshot(prepared, rates, edits=None):
     ]
     snapshot["ignored_settlement_lines"] = prepared.get("ignored_settlement_lines", [])
     snapshot["document_kind"] = "internal_booking_record"
-    snapshot["schema"] = "mittelhof.accounting.v4"
+    snapshot["schema"] = "mittelhof.accounting.v5"
     digest = sha256(json.dumps(snapshot, sort_keys=True, ensure_ascii=False,
                                separators=(",", ":")).encode("utf-8")).hexdigest()
     snapshot["sha256"] = digest
