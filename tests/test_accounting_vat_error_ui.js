@@ -32,7 +32,7 @@ card._selected={
   source:{
     booking_id:"98765",guest:"Test Gast",house:"Haus 14",channel:"Airbnb",
     total_gross:"475.00",arrival:"2026-12-22",departure:"2026-12-27",
-    accountng_type:"Einnahme", accounting_type:"Einnahme", document_number:"98765", service_date:"2026-12-27",
+    accounting_type:"Einnahme", document_number:"98765", service_date:"2026-12-27",
     booking_created_at:"2026-11-09", document_date:"2026-11-09", due_date:"2026-11-09",
     rows:[
       {source_index:0,description:"Base Price",gross:"355.00",quantity:1},
@@ -46,6 +46,9 @@ card._selected={
 };
 card._render();
 assert.match(html,/Belegdatum:<\/strong> 2026-11-09/);
+assert.match(html,/Belegnummer:<\/strong> 98765/);
+assert.match(html,/Leistungsdatum:<\/strong> 2026-12-27/);
+assert.match(html,/Belegtyp:<\/strong> Einnahme/);
 assert.match(html,/Fälligkeitsdatum:<\/strong> 2026-11-09/);
 const selects=html.match(/<select data-rate[^>]*>[\s\S]*?<\/select>/g)||[];
 assert.equal(selects.length,4);
