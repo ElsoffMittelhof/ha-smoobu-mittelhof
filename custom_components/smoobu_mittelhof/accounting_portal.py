@@ -168,6 +168,7 @@ class AccountingBookingView(HomeAssistantView):
                  or record["snapshot"].get("schema") != "mittelhof.accounting.v4"
                  or record["snapshot"].get("document_date") != prepared["document_date"]
                  or record["snapshot"].get("document_number") != prepared["document_number"]
+                 or record["snapshot"].get("accounting_type") != prepared["accounting_type"]
                  or record["snapshot"].get("service_date") != prepared["service_date"])
         )
         if public_record is not None and isinstance(record.get("snapshot"), dict):
@@ -239,6 +240,7 @@ class AccountingPdfView(HomeAssistantView):
         if (snapshot.get("schema") != "mittelhof.accounting.v4"
                 or snapshot.get("document_date") != prepared["document_date"]
                 or snapshot.get("document_number") != prepared["document_number"]
+                or snapshot.get("accounting_type") != prepared["accounting_type"]
                 or snapshot.get("service_date") != prepared["service_date"]):
             raise web.HTTPConflict(
                 text="Ältere Belegrevision ohne geprüfte Lexware-Belegnummer oder Leistungsdatum; "
@@ -315,6 +317,7 @@ class AccountingBundleView(HomeAssistantView):
             if (snapshot.get("schema") != "mittelhof.accounting.v4"
                     or snapshot.get("document_date") != source["document_date"]
                     or snapshot.get("document_number") != source["document_number"]
+                    or snapshot.get("accounting_type") != source["accounting_type"]
                     or snapshot.get("service_date") != source["service_date"]):
                 raise web.HTTPConflict(text="Belegnummer/Leistungsdatum noch nicht geprüft: " + bid)
             items.append((bid, snapshot))
