@@ -71,6 +71,12 @@ class TestGuestDrafts(unittest.TestCase):
         source=booking("Booking.com")
         source["departure"]="2028-02-29"
         self.assertEqual(mod.booking_due_date(source),"2028-03-01")
+        # OTA due dates come from check-in/out even if list rows omit 'created-at'.
+        for channel, expected in (("Airbnb","2027-01-11"),("Booking.com","2027-01-15")):
+            ota=booking(channel)
+            ota.pop("created-at")
+            self.assertEqual(mod.booking_due_date(ota), expected)
+            self.assertEqual(mod.make_draft(ota)["invoice"]["due_date"], expected)
         for change in (
             {"created-at":""},
             {"created-at":"2026-02-30 12:00"},
@@ -78,7 +84,7 @@ class TestGuestDrafts(unittest.TestCase):
             {"arrival":"2027-02-30"},
             {"departure":"2027-01-10"},
         ):
-            value=booking()
+            value=booking('Direkt')
             value.update(change)
             with self.subTest(change=change):
                 self.assertIsNone(mod.booking_due_date(value))
