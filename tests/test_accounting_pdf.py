@@ -137,6 +137,43 @@ class AccountingTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             core.approve_snapshot(p,["7"],[{"source_index":100,"description":"Fake","gross":"475.00"}])
 
+    def test_smoobu_long_stay_discount_can_be_reviewed_with_negative_gross(self):
+        # Regression: UI posts edits for all selected rows. A real source
+        # discount (-70.06) was previously rejected as HTTP 409 in
+        # AccountingBookingView.post despite an exact guest-gross match.
+        booking = sample("908.94")
+        booking["priceElements"] = [
+            {"type": "basePrice", "name": "Base price", "amount": "840.00"},
+            {"type": "discount", "name": "Long stay discount", "amount": "-70.06"},
+            {"type": "cleaningFee", "name": "Cleaning fee", "amount": "55.00"},
+            {"type": "addon", "name": "Hund", "amount": "84.00"},
+        ]
+        prepared = core.prepare_booking(booking, "Haus Test")
+        self.assertEqual(prepared["total_gross"], "908.94")
+        self.assertEqual([row["gross"] for row in prepared["rows"]],
+                         ["840.00", "-70.06", "55.00", "84.00"])
+        edits = [
+            {"source_index": row["source_index"], "description": row["description"],
+             "gross": row["gross"]} for row in prepared["rows"]
+        ]
+        snapshot = core.approve_snapshot(prepared, ["7"] * 4, edits)
+        self.assertEqual([row["gross"] for row in snapshot["rows"]],
+                         ["840.00", "-70.06", "55.00", "84.00"])
+        self.assertEqual(
+            sum(Decimal(row["gross"]) for row in snapshot["rows"]),
+            Decimal("908.94"))
+        self.assertEqual(snapshot["schema"], "mittelhof.accounting.v5")
+        self.assertIn(b"-70.06", core.render_pdf(snapshot))
+
+        # Do not accept arbitrary sign reversal, zero rows or a changed gross.
+        for idx, amount in ((1, "70.06"), (0, "-840.00"),
+                            (1, "0.00"), (0, "839.99")):
+            changed = [dict(row) for row in edits]
+            changed[idx]["gross"] = amount
+            with self.subTest(idx=idx, amount=amount):
+                with self.assertRaises(ValueError):
+                    core.approve_snapshot(prepared, ["7"] * 4, changed)
+
     def test_direct_and_tomas_invoice_routing_no_assumed_homepage_payment(self):
         b=sample()
         for channel in ("TOMAS","Direktbuchung"):
