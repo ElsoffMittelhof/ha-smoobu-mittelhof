@@ -69,4 +69,22 @@ card._render();
 assert.match(html,/Positionensumme ist ungültig/);
 assert.doesNotMatch(html,/\[object Object\]/);
 
+// Smoobu source-negative discount must remain editable with a negative
+// numeric input, while ordinary guest charges keep a positive lower bound.
+card._selected.record=null;
+card._selected.source.total_gross="908.94";
+card._selected.source.rows=[
+  {source_index:0,description:"Base price",gross:"840.00",quantity:1},
+  {source_index:1,description:"Long stay discount",gross:"-70.06",quantity:1},
+  {source_index:2,description:"Cleaning fee",gross:"55.00",quantity:1},
+  {source_index:3,description:"Hund",gross:"84.00",quantity:1},
+];
+card._render();
+const inputs=html.match(/<input data-gross[^>]+>/g)||[];
+assert.equal(inputs.length,4);
+assert.match(inputs[0],/min="0.01"/);
+assert.match(inputs[1],/max="-0.01"/);
+assert.match(inputs[1],/value="-70.06"/);
+assert.doesNotMatch(inputs[1],/min="0.01"/);
+
 console.log("Accounting VAT 7% defaults / error diagnostics regression: OK");
