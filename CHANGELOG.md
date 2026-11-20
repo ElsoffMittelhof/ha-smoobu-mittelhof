@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.7.11 — 2026-11-20 (Buchungsbeleg-HTTP-409 bei Smoobu-Rabatten behoben)
+
+- **Buchhaltungsbeleg:** Echte negative Smoobu-Gastpreispositionen wie `Long stay discount -70,06 EUR` können unter kontrollierter, revisionsgebundener Freigabe korrekt als Abzug übernommen werden; vorher wurde die manuelle Bestätigung aller Positionen fälschlich mit HTTP 409 blockiert.
+- Die Prüfung erlaubt nur **negative Beträge, die bereits in der originalen Smoobu-Gastposition negativ waren**. `0,00 EUR` und ein Wechsel des Vorzeichens sind gesperrt; die **exakte Summe aller ausgewählten Gastpositionen = Smoobu-Gastbrutto** ist weiterhin verpflichtend.
+- Der Admin-Lexware-Buchhaltungskarten-Dialog bietet für authentische Rabattpositionen negative Beträge an (passende HTML-Formulargrenze). Die Gastpreisposition wird **nicht** künstlich positiv gesetzt oder unterschlagen. Der Betrag wird in PDF, Netto-/USt-Berechnung und Buchungsprüfung als negativer Abzug geführt.
+- Offline-Regression gegen den Beispielbeleg **840,00 − 70,06 + 55,00 + 84,00 = 908,94 EUR**, mit Tests für negative Zeile, PDF, ungültige Nullen/Vorzeichen, veränderte Gesamtsumme und fehlerhafte Eingaben.
+- **Produktivdaten schützen:** Bestehende geprüfte PDFs und in Lexware hochgeladen markierte Belege bleiben in der HA-`.storage`-Buchhaltung erhalten. Keine automatische Neubewertung, Löschung, erneute Lexware-Einnahme oder Überschreibung veröffentlichter Belege; Korrekturen bereits hochgeladener Belege ausschließlich manuell.
+- **Unverändert:** Schema `mittelhof.accounting.v5`, Zahlungsziel-/Datumsregeln der v0.7.10, Gastrechnungssperre, Nuki-, Wäsche-, IT.NRW-, Smoobu-/HMAC-Integration und HA-Dashboard-Konfiguration. Vollständige stabile HACS-Version, kein Patch des laufenden Systems.
+
 ## 0.7.10 — 2026-11-10 (Fälligkeitsdatum nach Buchungskanal für Belege und Rechnungen)
 
 - **Einheitlicher Zahlungstermin** im Buchhaltungs-PDF und im Rechnungsentwurf: Airbnb = Anreise + 1 Tag; Booking.com = Abreise + 1 Tag; Naturhäuschen = ursprünglicher Buchungstag; TOMAS/Direkt/Homepage = 28 Tage vor Anreise bei mindestens 28 Tagen Buchungsvorlauf, sonst ursprünglicher Buchungstag.

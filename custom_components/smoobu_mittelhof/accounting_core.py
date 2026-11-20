@@ -222,8 +222,15 @@ def _edited_rows(prepared, edits):
         if not desc or len(desc) > 160 or any(ord(ch) < 32 for ch in desc):
             raise ValueError("Ungültiger Positionstext")
         gross = money(edit.get("gross"))
-        if gross <= 0:
-            raise ValueError("Gastposition muss einen positiven Bruttobetrag haben")
+        original_gross = money(original["gross"])
+        if gross == 0:
+            raise ValueError("Gastposition darf nicht 0,00 EUR betragen")
+        # Smoobu guest discounts are valid negative revenue lines. Only a
+        # source-negative position may remain negative after manual editing;
+        # never turn a positive guest charge into an arbitrary credit (or vice
+        # versa). The exact booking-total check still applies to all rows.
+        if (original_gross < 0 and gross > 0) or (original_gross > 0 and gross < 0):
+            raise ValueError("Vorzeichen der Smoobu-Gastpreisposition darf nicht geändert werden")
         result.append({**original, "description": desc, "gross": str(gross)})
     return result
 

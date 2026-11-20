@@ -219,13 +219,17 @@ class MittelhofAccountingCard extends HTMLElement {
       const included=!hasReviewed||Boolean(old);
       const desc=old?.description??r.description;
       const gross=old?.gross??r.gross;
+      // A source-negative Smoobu discount remains negative when reviewed.
+      // The backend still verifies original sign and exact booking total.
+      const sourceNegative=Number(r.gross)<0;
+      const amountLimit=sourceNegative?'max="-0.01"':'min="0.01"';
       // Local operating default: all current guest services use 7%.
       // Existing reviewed snapshots retain their explicitly selected rates.
       const rate=old?.tax_rate??"7";
       return '<div class="line" data-line="'+r.source_index+'">'+
         '<label><input data-include type="checkbox" '+(included?'checked ':'')+(locked?'disabled':'')+'> Gastpreisposition</label>'+
         '<input data-description type="text" maxlength="160" value="'+e(desc)+'" '+(locked?'disabled':'')+'>'+
-        '<div class="money"><input data-gross type="number" step="0.01" min="0.01" value="'+e(gross)+'" '+(locked?'disabled':'')+'>'+
+        '<div class="money"><input data-gross type="number" step="0.01" '+amountLimit+' value="'+e(gross)+'" '+(locked?'disabled':'')+'>'+
         ' EUR <select data-rate '+(locked?'disabled':'')+'><option value="" disabled>USt auswählen</option>'+
         ["0","7","19"].map(value=>'<option value="'+value+'" '+(value===rate?'selected':'')+'>'+value+' %</option>').join("")+
         '</select></div></div>';
